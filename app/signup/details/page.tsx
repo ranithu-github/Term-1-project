@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, User, Hash, Mail, ArrowRight, ArrowLeft, AlertCircle, Barcode, CheckCircle2, KeyRound } from 'lucide-react';
+import { Lock, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AuthHeader, authInputClass } from '@/components/AuthMarks';
 
 export default function SignUpDetailsPage() {
   const router = useRouter();
@@ -41,13 +41,13 @@ export default function SignUpDetailsPage() {
 
     const cleanName = username.trim();
     if (!cleanName || cleanName.length < 3) {
-      setError('Please enter your student name (with initials or full name).');
+      setError('Enter your name.');
       return;
     }
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      setError('Please enter a valid email address.');
+      setError('Enter a valid email.');
       return;
     }
 
@@ -82,7 +82,7 @@ export default function SignUpDetailsPage() {
       localStorage.setItem('astrix_pending_name', cleanName);
 
       setOtpSent(true);
-      setInfo(`Verification OTP sent to ${cleanEmail}. Please check your inbox.`);
+      setInfo(`Code sent to ${cleanEmail}.`);
     } catch (err: any) {
       console.warn('Signup OTP request failed:', err.message);
       setError('Could not reach the server. Please check your connection and try again.');
@@ -99,7 +99,7 @@ export default function SignUpDetailsPage() {
 
     const cleanCode = otpCode.trim();
     if (!cleanCode || cleanCode.length !== 6) {
-      setError('Please enter the full 6-digit verification code.');
+      setError('Enter the 6-digit code.');
       return;
     }
 
@@ -141,195 +141,145 @@ export default function SignUpDetailsPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-6 bg-white select-none overflow-y-auto">
-      {/* Header */}
-      <div className="pt-2 space-y-3">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => router.push('/signup')}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 hover:text-sky-600 transition py-1 px-2 rounded-lg hover:bg-slate-100"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back</span>
-          </button>
+    <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
+      <AuthHeader step={2} lines={['Your', 'details.']} onBack={() => router.push('/signup')} />
 
-          <span className="text-xs font-semibold text-slate-500">
-            Step 2 of 3
-          </span>
-        </div>
-
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Student Details</h1>
-          <p className="text-xs text-slate-500">
-            Enter your student details to register.
-          </p>
-        </div>
-      </div>
-
-      {/* Form Content */}
-      <div className="my-auto py-4 space-y-4">
+      {/* White sheet */}
+      <div className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-9 pb-8 space-y-5">
         {error && (
-          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2 animate-in fade-in">
+          <p className="px-4 py-3 rounded-xl bg-rose-50 text-rose-800 text-sm flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-            <span className="leading-relaxed">{error}</span>
-          </div>
+            <span>{error}</span>
+          </p>
         )}
 
         {info && (
-          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start space-x-2 animate-in fade-in">
+          <p className="px-4 py-3 rounded-xl bg-emerald-50 text-emerald-800 text-sm flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-            <span className="leading-relaxed">{info}</span>
-          </div>
+            <span>{info}</span>
+          </p>
         )}
 
-        {/* 1. Index No. (Locked from Barcode Scan) */}
-        <div className="space-y-1">
+        {/* Index No. (Locked from Barcode Scan) */}
+        <div className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-brand-50">
+          <span className="text-sm text-slate-500">Index number</span>
+          <span className="flex items-center gap-2 text-[15px] font-semibold tracking-wider text-brand-900">
+            {indexNo}
+            <Lock className="w-3.5 h-3.5 text-brand-300" />
+          </span>
+        </div>
+
+        {/* Name */}
+        <div className="space-y-2">
+          <label htmlFor="name" className="block text-sm font-semibold text-brand-900">
+            Name
+          </label>
+          <input
+            id="name"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="H. S. S. Liyanage"
+            disabled={otpSent}
+            className={authInputClass}
+            autoComplete="name"
+            required
+          />
+        </div>
+
+        {/* Email */}
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center space-x-1">
-              <Barcode className="w-3.5 h-3.5 text-sky-600" />
-              <span>Index Number</span>
+            <label htmlFor="email" className="block text-sm font-semibold text-brand-900">
+              Email
             </label>
-            <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold inline-flex items-center space-x-1">
-              <Lock className="w-2.5 h-2.5" />
-              <span>Verified Barcode</span>
-            </span>
+            {otpSent && (
+              <button
+                type="button"
+                onClick={() => setOtpSent(false)}
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                Change
+              </button>
+            )}
           </div>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Hash className="w-4 h-4" />
-            </div>
-            <input
-              type="text"
-              value={indexNo}
-              disabled
-              readOnly
-              className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-100/90 border-2 border-slate-200 text-base font-mono font-bold text-slate-900 tracking-wide cursor-not-allowed select-text shadow-xs"
-            />
-            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
-              <Lock className="w-4 h-4" />
-            </div>
-          </div>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="student@gmail.com"
+            disabled={otpSent}
+            className={authInputClass}
+            autoComplete="email"
+            required
+          />
         </div>
 
-        {/* 2. User Name (EDITABLE by Student) */}
-        <div className="space-y-1 pt-1">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            Student Name
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <User className="w-4 h-4" />
-            </div>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. H. S. S. Liyanage"
-              disabled={otpSent}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border-2 border-slate-200 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-500/15 focus:border-sky-600 transition shadow-xs disabled:bg-slate-50"
-              required
-            />
-          </div>
-        </div>
-
-        {/* 3. Email Address (EDITABLE by Student) */}
-        <div className="space-y-1 pt-1">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            Email Address
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Mail className="w-4 h-4" />
-            </div>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. student@gmail.com"
-              disabled={otpSent}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border-2 border-slate-200 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-500/15 focus:border-sky-600 transition shadow-xs disabled:bg-slate-50"
-              required
-            />
-          </div>
-        </div>
-
-        {/* 4. Send OTP Button (Below Email Field) */}
-        <div className="pt-1">
+        {!otpSent ? (
           <button
             type="button"
             onClick={() => handleSendOtp()}
             disabled={sendingOtp || !username.trim() || !email.trim()}
-            className="w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm flex items-center justify-center space-x-2 transition disabled:opacity-50 active:scale-[0.99] cursor-pointer"
+            className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-50 active:scale-[0.99]"
           >
             {sendingOtp ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <span>{otpSent ? 'Resend OTP' : 'Send OTP'}</span>
-                <Mail className="w-4 h-4" />
+                <span>Send code</span>
+                <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
-        </div>
-
-        {/* 5. In-Page OTP Section (Active once OTP is sent) */}
-        {otpSent && (
-          <form onSubmit={handleVerifyOtp} className="pt-2 space-y-3 animate-in fade-in slide-in-from-top-2 border-t border-slate-100">
-            <div className="space-y-1">
+        ) : (
+          /* Code entry, shown once the email is sent */
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1">
-                  <KeyRound className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Enter 6-Digit OTP</span>
+                <label htmlFor="code" className="block text-sm font-semibold text-brand-900">
+                  6-digit code
                 </label>
                 <button
                   type="button"
-                  onClick={() => setOtpSent(false)}
-                  className="text-[11px] text-sky-600 hover:text-sky-700 font-semibold"
+                  onClick={() => handleSendOtp()}
+                  disabled={sendingOtp}
+                  className="text-sm font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
                 >
-                  Edit Email
+                  {sendingOtp ? 'Sending...' : 'Resend'}
                 </button>
               </div>
-
               <input
+                id="code"
                 type="text"
+                inputMode="numeric"
                 maxLength={6}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
-                className="w-full py-3 px-4 rounded-xl bg-white border-2 border-sky-300 text-center font-mono text-xl tracking-[0.3em] font-black text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-4 focus:ring-sky-500/15 focus:border-sky-600 transition shadow-xs"
+                placeholder="000000"
+                className={`${authInputClass} text-center text-2xl tracking-[0.5em] font-semibold`}
+                autoComplete="one-time-code"
                 required
                 autoFocus
               />
             </div>
 
-            {/* Verify OTP Button */}
             <button
               type="submit"
               disabled={verifyingOtp || otpCode.length !== 6}
-              className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider shadow-md shadow-emerald-600/25 flex items-center justify-center space-x-2 transition disabled:opacity-50 active:scale-[0.99] cursor-pointer"
+              className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-50 active:scale-[0.99]"
             >
               {verifyingOtp ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>Verify OTP</span>
+                  <span>Verify</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="pt-3 border-t border-slate-100 text-center">
-        <Link
-          href="/signup"
-          className="text-xs font-semibold text-slate-500 hover:text-sky-600 transition"
-        >
-          ← Scan a different Student ID
-        </Link>
       </div>
     </div>
   );

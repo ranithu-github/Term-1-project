@@ -12,7 +12,7 @@ import {
   ArrowRight,
   UserCheck,
 } from 'lucide-react';
-import { StepBars } from '@/components/AuthMarks';
+import { AuthHeader } from '@/components/AuthMarks';
 
 // The UoM student ID barcode contains only the index number: 6 digits + a letter
 const INDEX_PATTERN = /^[0-9]{6}[A-Z]$/;
@@ -321,19 +321,7 @@ export default function BarcodeScanPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
-      {/* Blue header band */}
-      <div className="relative px-7 pt-8 pb-20 text-white overflow-hidden">
-        <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-white/[0.07]" aria-hidden="true" />
-        <div className="relative">
-          <StepBars current={1} />
-        </div>
-
-        <h1 className="relative mt-14 font-display text-[44px] leading-[1.02] font-semibold">
-          Scan your
-          <br />
-          student ID.
-        </h1>
-      </div>
+      <AuthHeader step={1} lines={['Scan your', 'student ID.']} />
 
       {/* White sheet */}
       <div className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-9 pb-8 space-y-4">

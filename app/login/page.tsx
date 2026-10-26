@@ -162,7 +162,7 @@ function LoginForm() {
   };
 
   const inputClass =
-    'w-full px-4 py-3.5 rounded-xl bg-brand-50 border border-brand-100 text-[15px] text-brand-900 placeholder-brand-300 focus:outline-none focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition';
+    'w-full px-4 py-3.5 rounded-xl bg-brand-50 border border-brand-100 text-base text-brand-900 placeholder-brand-300 focus:outline-none focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition';
 
   return (
     <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
