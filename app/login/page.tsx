@@ -3,8 +3,30 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Umbrella, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useViewMode } from '@/components/ViewModeContext';
+
+// Line-drawn umbrella, tilted, sitting inside the header circle
+function UmbrellaMark() {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className="absolute top-7 right-8 w-28 h-28 -rotate-12"
+      fill="none"
+      stroke="white"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M50 18 V26" />
+      <path d="M10 50 C 14 22, 86 22, 90 50 Q 80 43 70 50 Q 60 43 50 50 Q 40 43 30 50 Q 20 43 10 50 Z" />
+      <path d="M50 26 C 42 33 34 41 30 50" strokeOpacity="0.6" />
+      <path d="M50 26 C 58 33 66 41 70 50" strokeOpacity="0.6" />
+      <path d="M50 50 V 80 a 6 6 0 0 1 -12 0" />
+    </svg>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -34,9 +56,9 @@ function LoginForm() {
     }
 
     if (isVerified) {
-      setSuccess('✅ Email verified & password created! Enter your credentials to sign in.');
+      setSuccess('Email verified and password created. Sign in to continue.');
     } else if (isReset) {
-      setSuccess('✅ Password reset successfully! Please sign in with your new password.');
+      setSuccess('Password reset. Sign in with your new password.');
     }
 
     const notice = searchParams.get('notice');
@@ -139,206 +161,192 @@ function LoginForm() {
     setError(null);
   };
 
-  return (
-    <div className="flex-1 flex flex-col justify-between p-6 bg-white select-none">
-      {/* Top Header */}
-      <div className="pt-6 space-y-4">
-        <div className="flex items-center justify-end">
-          {!isStudentMode && (
-            <button
-              type="button"
-              onClick={fillDemoStudent}
-              className="text-[11px] text-sky-600 hover:text-sky-700 font-bold bg-sky-50 hover:bg-sky-100/80 px-2.5 py-1 rounded-lg transition"
-            >
-              Fill dev index (DEV001)
-            </button>
-          )}
-        </div>
+  const inputClass =
+    'w-full px-4 py-3.5 rounded-xl bg-brand-50 border border-brand-100 text-[15px] text-brand-900 placeholder-brand-300 focus:outline-none focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition';
 
-        <div className="space-y-1">
-          <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-lg shadow-sky-600/30 mb-3">
-            <Umbrella className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Sign In</h1>
-          <p className="text-xs text-slate-500">
-            Enter your University Index Number to access the umbrella station.
-          </p>
-        </div>
+  return (
+    <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
+      {/* Blue header band */}
+      <div className="relative px-7 pt-8 pb-20 text-white overflow-hidden">
+        {/* One soft circle for depth */}
+        <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-white/[0.07]" aria-hidden="true" />
+
+        <UmbrellaMark />
+
+        {!isStudentMode && (
+          <button
+            type="button"
+            onClick={fillDemoStudent}
+            className="relative text-[11px] font-semibold bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition"
+          >
+            Fill dev index (DEV001)
+          </button>
+        )}
+
+        <h1 className="relative mt-20 font-display text-[44px] leading-[1.02] font-semibold">
+          Welcome
+          <br />
+          back.
+        </h1>
       </div>
 
-      {/* Form Content */}
-      <form onSubmit={handleSignIn} className="my-auto py-6 space-y-4">
-        {error && (
-          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {success && (
-          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start space-x-2 animate-in fade-in leading-relaxed">
-            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-            <span>{success}</span>
-          </div>
-        )}
-
-        {/* Index Number */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            Index No.
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <User className="w-4 h-4" />
+      {/* White form sheet */}
+      <div className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-10 pb-8">
+        <form onSubmit={handleSignIn} className="space-y-5">
+          {error && (
+            <div className="p-3.5 rounded-xl bg-rose-50 text-rose-700 text-sm flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
+          )}
+
+          {success && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 text-emerald-800 text-sm flex items-start gap-2 leading-relaxed">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+              <span>{success}</span>
+            </div>
+          )}
+
+          {/* Index Number */}
+          <div className="space-y-2">
+            <label htmlFor="index-no" className="block text-sm font-semibold text-brand-900">
+              Index number
+            </label>
             <input
+              id="index-no"
               type="text"
               value={indexNo}
               onChange={(e) => setIndexNo(e.target.value)}
-              placeholder="e.g. 210042A"
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 uppercase font-mono tracking-wide transition"
+              placeholder="210042A"
+              className={`${inputClass} uppercase tracking-wider font-medium`}
+              autoComplete="username"
               required
             />
           </div>
-        </div>
 
-        {/* Password */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Password
-            </label>
-            <button
-              type="button"
-              onClick={handleOpenForgotModal}
-              className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
-            >
-              Forgot Password?
-            </button>
-          </div>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Lock className="w-4 h-4" />
+          {/* Password */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="password" className="block text-sm font-semibold text-brand-900">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={handleOpenForgotModal}
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                Forgot password?
+              </button>
             </div>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Sign In Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full mt-2 py-3.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm shadow-md shadow-sky-600/30 flex items-center justify-center space-x-2 transition disabled:opacity-60 active:scale-[0.99]"
-        >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <>
-              <span>Sign In</span>
-              <ArrowRight className="w-4 h-4" />
-            </>
-          )}
-        </button>
-
-        {/* Prominent Register / Sign Up Section */}
-        <div className="pt-1 text-center space-y-2">
-          <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">New student?</span>
-            <div className="flex-grow border-t border-slate-200"></div>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                className={`${inputClass} pr-12`}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-brand-300 hover:text-brand-600"
+              >
+                {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+              </button>
+            </div>
           </div>
 
-          <Link
-            href="/signup"
-            className="w-full py-3.5 px-4 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs border border-slate-200 shadow-sm flex items-center justify-center space-x-2 transition active:scale-[0.99]"
+          {/* Sign In Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-60 active:scale-[0.99]"
           >
-            <span>Register with Student ID</span>
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <span>Sign in</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="mt-8 text-center text-sm text-slate-500">
+          New to Astrix?{' '}
+          <Link href="/signup" className="font-semibold text-brand-600 hover:text-brand-700">
+            Register with your student ID
           </Link>
-        </div>
-      </form>
+        </p>
+      </div>
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-start justify-between">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-brand-900/40">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 space-y-5">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-black text-slate-900 tracking-tight">Reset Password</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Enter your University Index Number to receive a 6-digit reset code at your registered email.
+                <h3 className="font-display text-2xl font-semibold text-brand-900">Reset password</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  We'll email a 6-digit code to the address you registered with.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-sm font-bold"
+                aria-label="Close"
+                className="text-slate-400 hover:text-slate-600 p-1 -m-1 rounded-lg"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {forgotError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2 animate-in fade-in">
+              <div className="p-3 rounded-xl bg-rose-50 text-rose-700 text-sm flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{forgotError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSendResetCode} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Index Number
+            <form onSubmit={handleSendResetCode} className="space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="forgot-index" className="block text-sm font-semibold text-brand-900">
+                  Index number
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    value={forgotIndex}
-                    onChange={(e) => setForgotIndex(e.target.value.toUpperCase())}
-                    placeholder="e.g. 250373T"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 uppercase font-mono font-semibold transition"
-                    autoFocus
-                    required
-                  />
-                </div>
+                <input
+                  id="forgot-index"
+                  type="text"
+                  value={forgotIndex}
+                  onChange={(e) => setForgotIndex(e.target.value.toUpperCase())}
+                  placeholder="250373T"
+                  className={`${inputClass} uppercase tracking-wider font-medium`}
+                  autoFocus
+                  required
+                />
               </div>
 
-              <div className="flex items-center space-x-2 pt-1">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="flex-1 py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition"
+                  className="flex-1 py-3.5 px-4 rounded-xl text-brand-900 hover:bg-brand-50 font-semibold text-sm transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={forgotLoading}
-                  className="flex-1 py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md shadow-sky-600/30 flex items-center justify-center space-x-1.5 transition disabled:opacity-60"
+                  className="flex-1 py-3.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm flex items-center justify-center gap-1.5 transition disabled:opacity-60"
                 >
                   {forgotLoading ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <>
-                      <span>Send Code</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
+                    'Send code'
                   )}
                 </button>
               </div>
@@ -355,7 +363,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="flex-1 flex items-center justify-center bg-white">
-          <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
