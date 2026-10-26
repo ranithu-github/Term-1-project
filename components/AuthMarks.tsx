@@ -19,14 +19,14 @@ export function StepBars({ current }: { current: 1 | 2 | 3 }) {
   );
 }
 
-// Blue band with step bars, an optional back button and a two-line headline
+// Blue band with optional step bars, an optional back button and a two-line headline
 export function AuthHeader({
   step,
   lines,
   note,
   onBack,
 }: {
-  step: 1 | 2 | 3;
+  step?: 1 | 2 | 3;
   lines: [string, string];
   note?: string;
   onBack?: () => void;
@@ -35,8 +35,8 @@ export function AuthHeader({
     <div className="relative px-7 pt-8 pb-20 text-white overflow-hidden">
       <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-white/[0.07]" aria-hidden="true" />
 
-      <div className="relative flex items-center justify-between">
-        <StepBars current={step} />
+      <div className="relative flex items-center justify-between min-h-9">
+        {step ? <StepBars current={step} /> : <span />}
         {onBack && (
           <button
             type="button"
