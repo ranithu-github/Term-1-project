@@ -1,22 +1,23 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { readJson, str } from '@/lib/http';
+import { LIMITS, STUDENT_INDEX } from '@/lib/signup-rules';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { index_no } = body;
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const cleanIndex = str(parsed.body.index_no).toUpperCase();
 
-    const cleanIndex = index_no?.trim().toUpperCase();
-
-    if (!rateLimit(`check-index:ip:${clientIp(request)}`, 30, 15 * 60 * 1000)) {
+    if (!(await rateLimit(`check-index:ip:${clientIp(request)}`, ...LIMITS.checkIndexNetwork))) {
       return NextResponse.json(
         { success: false, message: 'Too many requests. Please wait a few minutes and try again.' },
         { status: 429 }
       );
     }
 
-    if (!cleanIndex || !/^(DEV[0-9]{3}|[0-9]{6}[A-Z])$/i.test(cleanIndex)) {
+    if (!STUDENT_INDEX.test(cleanIndex)) {
       return NextResponse.json(
         {
           success: false,

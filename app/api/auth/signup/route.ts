@@ -5,17 +5,16 @@ import { createVerificationToken, hashOtp } from '@/lib/auth-token';
 import { generateOtp } from '@/lib/otp';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { logActivity, raiseAlert } from '@/lib/events';
-
-const INDEX_FORMAT = /^(DEV[0-9]{3}|[0-9]{6}[A-Z])$/;
+import { readJson, str } from '@/lib/http';
+import { EMAIL_FORMAT, LIMITS, STUDENT_INDEX, emailAllowed, emailDomainMessage } from '@/lib/signup-rules';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { index_no, username, email } = body;
-
-    const cleanIndex = index_no?.trim().toUpperCase();
-    const cleanEmail = email?.trim().toLowerCase();
-    const cleanName = username?.trim().slice(0, 100) || 'Student';
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const cleanIndex = str(parsed.body.index_no).toUpperCase();
+    const cleanEmail = str(parsed.body.email).toLowerCase();
+    const cleanName = str(parsed.body.username).slice(0, 100) || 'Student';
 
     if (!cleanIndex || !cleanEmail) {
       return NextResponse.json(
@@ -24,20 +23,24 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!INDEX_FORMAT.test(cleanIndex)) {
+    // Students only: developer/admin accounts are created with scripts/create-account.mjs
+    if (!STUDENT_INDEX.test(cleanIndex)) {
       return NextResponse.json(
         { success: false, message: 'Invalid Student ID format. A valid Moratuwa Index is 6 digits followed by a letter (e.g. 250373T).' },
         { status: 400 }
       );
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    if (!EMAIL_FORMAT.test(cleanEmail)) {
       return NextResponse.json({ success: false, message: 'Please enter a valid email address.' }, { status: 400 });
     }
+    if (!emailAllowed(cleanEmail)) {
+      return NextResponse.json({ success: false, message: emailDomainMessage() }, { status: 400 });
+    }
 
-    // Max 3 codes per index and 10 per IP every 15 minutes (stops inbox flooding)
+    // Per index (stops inbox flooding), and generously per network
     const ip = clientIp(request);
-    if (!rateLimit(`signup:idx:${cleanIndex}`, 3, 15 * 60 * 1000) || !rateLimit(`signup:ip:${ip}`, 10, 15 * 60 * 1000)) {
+    if (!(await rateLimit(`signup:idx:${cleanIndex}`, ...LIMITS.signupAccount)) || !(await rateLimit(`signup:ip:${ip}`, ...LIMITS.signupNetwork))) {
       await raiseAlert('SIGNUP_FLOOD', 'warning', `Too many signup codes requested for ${cleanIndex} or from one network.`, {
         index_no: cleanIndex, actor: cleanIndex, dedupeKey: `idx:${cleanIndex}`, details: { ip },
       });
@@ -82,7 +85,6 @@ export async function POST(request: Request) {
       expires_at: expiresAt,
     });
 
-    // Dispatch verification OTP email via Gmail SMTP
     const emailResult = await sendVerificationOtpEmail(cleanEmail, cleanName, otp);
     if (!emailResult.success) {
       console.error('❌ [API/Auth/Signup] Email delivery failed:', emailResult.error);

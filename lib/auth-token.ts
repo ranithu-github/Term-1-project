@@ -19,6 +19,14 @@ export function hashOtp(indexNo: string, otp: string): string {
 }
 
 /**
+ * Keyed hash of a password-reset code, bound to the index number. Only this
+ * hash is stored; the code itself is only in the email.
+ */
+export function hashResetCode(indexNo: string, code: string): string {
+  return crypto.createHmac('sha256', getAuthSecret()).update(`reset:${indexNo}:${code}`).digest('hex');
+}
+
+/**
  * Creates a tamper-proof signed token containing the pending student signup details
  */
 export function createVerificationToken(payload: PendingSignupPayload): string {

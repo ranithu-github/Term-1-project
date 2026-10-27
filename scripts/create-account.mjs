@@ -1,5 +1,6 @@
-// Prints the SQL that creates (or resets) the admin account.
-// Run: node scripts/create-admin.mjs
+// Prints the SQL that creates (or resets) an admin or developer account.
+// These accounts can't be made through signup (it only accepts student index numbers).
+// Run: node scripts/create-account.mjs
 // Then paste the output into the Supabase SQL Editor. The password is hashed
 // here the same way as lib/password.ts, so only the hash reaches the database.
 import crypto from 'crypto';
@@ -11,7 +12,10 @@ const ask = async (prompt) => {
   process.stdout.write(prompt);
   return ((await lines.next()).value || '').trim();
 };
-const index = ((await ask('Admin username [admin-astrix]: ')) || 'admin-astrix').toUpperCase();
+const role = ((await ask('Role, admin or dev [admin]: ')) || 'admin').toLowerCase();
+if (role !== 'admin' && role !== 'dev') throw new Error('Role must be admin or dev.');
+const fallback = role === 'admin' ? 'admin-astrix' : 'DEV001';
+const index = ((await ask(`Username [${fallback}]: `)) || fallback).toUpperCase();
 const email = await ask('Email for password resets: ');
 const password = await ask('Password (min 8 characters): ');
 rl.close();
@@ -30,4 +34,4 @@ ON CONFLICT (index_no) DO UPDATE
   SET email = EXCLUDED.email, password = EXCLUDED.password,
       is_verified = TRUE, is_locked = FALSE, updated_at = NOW();
 `);
-console.log(`Also set ADMIN_INDEXES=${index} where the site is hosted, then redeploy.`);
+console.log(`Also add ${index} to ${role === 'admin' ? 'ADMIN_INDEXES' : 'DEV_INDEXES'} where the site is hosted, then redeploy.`);

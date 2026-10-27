@@ -6,14 +6,15 @@ import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { logActivity, raiseAlert } from '@/lib/events';
 import { isAdminIndex } from '@/lib/admin';
 import { isDevIndex } from '@/lib/dev';
+import { readJson, str } from '@/lib/http';
+import { LIMITS } from '@/lib/signup-rules';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { index_no, password } = body;
-
-    const cleanIndex = index_no?.trim().toUpperCase();
-    const cleanPassword = password?.trim();
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const cleanIndex = str(parsed.body.index_no).toUpperCase();
+    const cleanPassword = str(parsed.body.password);
 
     if (!cleanIndex || !cleanPassword) {
       return NextResponse.json(
@@ -22,9 +23,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Max 10 attempts per account and 30 per IP every 15 minutes
+    // Per account, and (generously, a campus shares one IP) per network
     const ip = clientIp(request);
-    if (!rateLimit(`login:idx:${cleanIndex}`, 10, 15 * 60 * 1000) || !rateLimit(`login:ip:${ip}`, 30, 15 * 60 * 1000)) {
+    if (!(await rateLimit(`login:idx:${cleanIndex}`, ...LIMITS.loginAccount)) || !(await rateLimit(`login:ip:${ip}`, ...LIMITS.loginNetwork))) {
       await raiseAlert('TOO_MANY_LOGIN_ATTEMPTS', 'warning', `Too many sign-in attempts for ${cleanIndex} or from one network.`, {
         index_no: cleanIndex, actor: cleanIndex, dedupeKey: `idx:${cleanIndex}`, details: { ip },
       });

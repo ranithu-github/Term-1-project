@@ -2,9 +2,9 @@ import { NextResponse, after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSessionIndex, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session';
 import { isDevIndex } from '@/lib/dev';
-import { findOpenLoan } from '@/lib/loans';
+import { findOpenLoan, isOverdue } from '@/lib/loans';
 import { syncCabinetSlots } from '@/lib/cabinet-sync';
-import { getCachedCabinetOnline } from '@/lib/mqtt';
+import { getCabinetState } from '@/lib/cabinet-state';
 import { isAdminIndex } from '@/lib/admin';
 import type { MeResponse, PublicSlot } from '@/lib/types';
 
@@ -24,8 +24,7 @@ export async function GET() {
 
     // After answering, bring the database in step with what is physically in the
     // cabinet (e.g. an umbrella returned at the cabinet with r1). Throttled to one
-    // sync every 15 s per server instance; dashboards poll every 5 s, so changes
-    // show up on the next refresh.
+    // sync every 15 s across all server instances; changes show up on the next refresh.
     after(() => syncCabinetSlots());
 
     const { data: user, error: userError } = await supabaseAdmin
@@ -49,10 +48,10 @@ export async function GET() {
       return response;
     }
 
-    const { data: dbSlots, error: slotsError } = await supabaseAdmin
-      .from('umbrellas')
-      .select('slot, umbrella_id, availability, borrowed_user')
-      .order('slot', { ascending: true });
+    const [{ data: dbSlots, error: slotsError }, cabinet] = await Promise.all([
+      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user, pending_op').order('slot', { ascending: true }),
+      getCabinetState(),
+    ]);
 
     if (slotsError) {
       console.error('❌ [API/Me] Slot lookup error:', slotsError.message);
@@ -63,7 +62,7 @@ export async function GET() {
     const slots: PublicSlot[] = (dbSlots || []).map((s) => ({
       slot: s.slot,
       umbrella_id: s.umbrella_id,
-      availability: Boolean(s.availability) && !s.borrowed_user,
+      availability: Boolean(s.availability) && !s.borrowed_user && !s.pending_op,
     }));
 
     const isDev = isDevIndex(indexNo);
@@ -74,7 +73,7 @@ export async function GET() {
       user: { index_no: user.index_no, username: user.username, email: user.email },
       is_dev: isDev,
       is_admin: isAdminIndex(indexNo),
-      cabinet_online: getCachedCabinetOnline(),
+      cabinet_online: cabinet.online,
       slots,
       active_loan: loan
         ? {
@@ -83,7 +82,7 @@ export async function GET() {
             slot: (dbSlots || []).find((s) => s.umbrella_id === loan.umbrella_id)?.slot ?? null,
             borrowed_time: loan.borrowed_time,
             due_time: loan.due_time,
-            is_overdue: loan.status === 'OVERDUE',
+            is_overdue: isOverdue(loan),
           }
         : null,
     };

@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { readJson, str } from '@/lib/http';
+import { LIMITS } from '@/lib/signup-rules';
 import { sendResetCode } from '@/lib/password-reset';
 import { logActivity, raiseAlert } from '@/lib/events';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { index_no } = body;
-
-    const cleanIndex = index_no?.trim().toUpperCase();
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const cleanIndex = str(parsed.body.index_no).toUpperCase();
 
     if (!cleanIndex) {
       return NextResponse.json(
@@ -17,9 +18,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Max 3 reset emails per account and 10 per IP every 15 minutes
+    // Max 3 reset emails per account, and (generously) per network, every 15 minutes
     const ip = clientIp(request);
-    if (!rateLimit(`forgot:idx:${cleanIndex}`, 3, 15 * 60 * 1000) || !rateLimit(`forgot:ip:${ip}`, 10, 15 * 60 * 1000)) {
+    if (!(await rateLimit(`forgot:idx:${cleanIndex}`, ...LIMITS.forgotAccount)) || !(await rateLimit(`forgot:ip:${ip}`, ...LIMITS.forgotNetwork))) {
       await raiseAlert('PASSWORD_RESET_FLOOD', 'warning', `Too many password reset requests for ${cleanIndex} or from one network.`, {
         index_no: cleanIndex, actor: cleanIndex, dedupeKey: `idx:${cleanIndex}`, details: { ip },
       });

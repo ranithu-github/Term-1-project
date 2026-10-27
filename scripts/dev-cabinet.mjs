@@ -21,6 +21,7 @@
 //   t1-t4  someone takes the umbrella from a slot by hand
 //   r1-r4  someone puts the umbrella back in a slot by hand
 //   p      print the slots
+//   l      toggle "old firmware" mode (no op ids in replies)
 // =====================================================================
 import net from 'net';
 import http from 'http';
@@ -58,6 +59,7 @@ console.log(`🧪 Local MQTT broker: mqtt://localhost:${TCP_PORT}  ws://localhos
 // docked: dock button pressed; umbrella: tag number read in the slot (null = none)
 const slots = [1, 2, 3, 4].map((slot) => ({ slot, busy: false, docked: true, umbrella: slot, locked: true }));
 let next = null; // one-shot outcome for the next command: n | e | w | s | x
+let legacy = process.env.DEV_CABINET_LEGACY === '1'; // behave like firmware that doesn't echo op ids
 let online = true;
 let cabinet = null;
 
@@ -88,19 +90,20 @@ function handleCommand(raw) {
   }
   const action = String(cmd.action || '').toUpperCase();
   const s = slots[Number(cmd.slot) - 1];
+  const op = typeof cmd.op === 'string' && !legacy ? { op: cmd.op.slice(0, 16) } : {}; // echoed like the firmware
   if (!s || !['BORROW', 'RETURN', 'OPEN', 'CLOSE'].includes(action)) return;
   console.log(`📥 ${action} slot ${s.slot}`);
 
   const outcome = next;
   next = null;
   if (outcome === 'x') return console.log('   (no "got it" sent, as asked)');
-  if (s.busy) return say(TOPIC.ack, { action, slot: s.slot, accepted: false, reason: 'BUSY' });
-  say(TOPIC.ack, { action, slot: s.slot, accepted: true });
+  if (s.busy) return say(TOPIC.ack, { action, slot: s.slot, ...op, accepted: false, reason: 'BUSY' });
+  say(TOPIC.ack, { action, slot: s.slot, ...op, accepted: true });
 
   if (action === 'OPEN' || action === 'CLOSE') {
     s.locked = action === 'CLOSE';
     publishSlots();
-    return say(TOPIC.response, { action, slot: s.slot, status: 'SUCCESS', message: action === 'OPEN' ? 'Lock opened.' : 'Lock closed.' });
+    return say(TOPIC.response, { action, slot: s.slot, ...op, status: 'SUCCESS', message: action === 'OPEN' ? 'Lock opened.' : 'Lock closed.' });
   }
 
   s.busy = true;
@@ -132,7 +135,7 @@ function handleCommand(raw) {
     }
     publishSlots();
     if (outcome === 's') return console.log('   (result not sent, as asked)');
-    say(TOPIC.response, { action, slot: s.slot, ...result });
+    say(TOPIC.response, { action, slot: s.slot, ...op, ...result });
     console.log(`📤 ${action} slot ${s.slot}: ${result.status}${result.reason ? ` ${result.reason}` : ''}`);
   }, STEP_MS);
 }
@@ -164,6 +167,9 @@ rl.on('line', (line) => {
     Object.assign(slot, { docked: true, umbrella: slot.slot });
     publishSlots();
     console.log(`↩️  Umbrella ${slot.slot} put back by hand`);
+  } else if (key === 'l') {
+    legacy = !legacy;
+    console.log(`🧓 Old-firmware mode (no op ids): ${legacy ? 'on' : 'off'}`);
   } else if (key === 'p') {
     console.table(slots);
   }

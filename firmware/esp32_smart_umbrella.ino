@@ -161,6 +161,8 @@ struct SlotJob {
   bool stayed = true;            // button stayed in the required state this window
   bool wrongUmbrella = false;    // last check found a wrong umbrella (returns only)
   int lastFound = -1;            // last tag result (umbrella 0-3, NO_TAG or UNKNOWN_TAG)
+  String op;                     // operation id from the server, echoed in the ack and result
+  bool reportWhenLocked = false; // a successful return is reported only once the lock has closed
 };
 
 SlotJob jobs[NUM_SLOTS];
@@ -369,6 +371,13 @@ void finishJob(int slot, bool success) {
     job.phase = SLOT_LOCKING;
   }
 
+  // A return only counts once the umbrella is locked in: report it from SLOT_LOCKING,
+  // after checking it is still docked (it could be pulled out while the lock closes)
+  if (!job.isBorrow && success) {
+    job.reportWhenLocked = true;
+    return;
+  }
+
   // Update what is in the slot from the outcome, and report it BEFORE the result,
   // so the website never sees an old "umbrella is here" after it records a borrow
   if (job.isBorrow) {
@@ -382,7 +391,7 @@ void finishJob(int slot, bool success) {
   }
   publishSlots();
 
-  publishResult(job.isBorrow ? "BORROW" : "RETURN", slot + 1, res);
+  publishResult(job.isBorrow ? "BORROW" : "RETURN", slot + 1, res, job.op);
 }
 
 void nextCheck(int slot) {
@@ -432,6 +441,27 @@ void evaluateTag(int slot, int found) {
     }
   }
   nextCheck(slot);
+}
+
+// The lock has closed after a successful return: confirm the umbrella is still docked, then report
+void reportLockedReturn(int slot) {
+  SlotJob &job = jobs[slot];
+  job.reportWhenLocked = false;
+  char msg[160];
+  Result res;
+  if (digitalRead(BUTTON_PINS[slot]) == LOW) {
+    snprintf(msg, sizeof(msg), "Umbrella %d returned to Slot %d. The lock is closed.", slot + 1, slot + 1);
+    res = { true, "", msg };
+    setSlotState(slot, true, slot);
+  } else {
+    snprintf(msg, sizeof(msg), "Umbrella %d was taken out of Slot %d before the lock closed. The lock is closed.", slot + 1, slot + 1);
+    res = { false, "NO_UMBRELLA", msg };
+    setSlotState(slot, false, NO_TAG);
+    setLight(slot, LIGHT_RED, errorShowTime);
+  }
+  Serial.println(msg);
+  publishSlots();
+  publishResult("RETURN", slot + 1, res, job.op);
 }
 
 // Moves one slot's job forward; never waits
@@ -486,6 +516,7 @@ void updateJob(int slot) {
 
     case SLOT_LOCKING:
       if (servoArrived(slot)) {
+        if (job.reportWhenLocked) reportLockedReturn(slot);
         job.phase = SLOT_IDLE;
         if (lightColor[slot] != LIGHT_RED) setLight(slot, LIGHT_OFF, 0);
         Serial.printf("Slot %d locked.\n", slot + 1);
@@ -598,7 +629,7 @@ void watchIdleSlots() {
 }
 
 // Start a borrow/return on one slot; other slots keep running
-void startJob(int slot, bool isBorrow) {
+void startJob(int slot, bool isBorrow, const String &op) {
   SlotJob &job = jobs[slot];
   if (job.phase != SLOT_IDLE) {
     Serial.printf("Ignored: Slot %d is already busy.\n", slot + 1);
@@ -606,6 +637,7 @@ void startJob(int slot, bool isBorrow) {
   }
   job = SlotJob();
   job.isBorrow = isBorrow;
+  job.op = op;
   job.phase = SLOT_OPENING;
   targetPosition[slot] = LOCK_OPEN;
   setLight(slot, isBorrow ? LIGHT_GREEN : LIGHT_BLUE, 0);
@@ -661,10 +693,11 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 // Publishes one of the 5 standard responses (QoS 0)
-void publishResult(const char* action, int slotNumber, const Result &res) {
+void publishResult(const char* action, int slotNumber, const Result &res, const String &op) {
   JsonDocument doc;
   doc["action"] = action;
   doc["slot"] = slotNumber;
+  if (op.length() > 0) doc["op"] = op;
   doc["status"] = res.success ? "SUCCESS" : "FAIL";
   if (!res.success) doc["reason"] = res.reason;
   doc["message"] = res.message;
@@ -686,17 +719,22 @@ void publishStatus() {
 }
 
 // "Got it" for a command, sent the moment it arrives. accepted=false means the slot is busy.
-void publishAck(const String &action, int slotNumber, bool accepted) {
+void publishAck(const String &action, int slotNumber, bool accepted, const String &op) {
   if (!mqtt.connected()) return;
-  char payload[128];
-  snprintf(payload, sizeof(payload), "{\"action\":\"%s\",\"slot\":%d,\"accepted\":%s%s}",
-           action.c_str(), slotNumber, accepted ? "true" : "false", accepted ? "" : ",\"reason\":\"BUSY\"");
+  JsonDocument doc;
+  doc["action"] = action;
+  doc["slot"] = slotNumber;
+  if (op.length() > 0) doc["op"] = op;
+  doc["accepted"] = accepted;
+  if (!accepted) doc["reason"] = "BUSY";
+  char payload[160];
+  serializeJson(doc, payload, sizeof(payload));
   mqtt.publish(ACK_TOPIC, payload);
 }
 
 // Check the action and slot, confirm the command, then start the job.
 // Invalid commands are only logged here - the response topic only carries standard responses.
-void runAction(String action, int slotNumber) {
+void runAction(String action, int slotNumber, const String &op) {
   action.toUpperCase();
 
   if (slotNumber < 1 || slotNumber > NUM_SLOTS) {
@@ -711,7 +749,7 @@ void runAction(String action, int slotNumber) {
 
   // A borrow/return can't start on a slot that is already busy
   bool busy = (action == "BORROW" || action == "RETURN") && jobs[slotNumber - 1].phase != SLOT_IDLE;
-  publishAck(action, slotNumber, !busy);
+  publishAck(action, slotNumber, !busy, op);
   if (busy) {
     Serial.printf("Ignored: Slot %d is already busy.\n", slotNumber);
     return;
@@ -722,21 +760,22 @@ void runAction(String action, int slotNumber) {
     targetPosition[slotNumber - 1] = LOCK_OPEN;
     Serial.printf("=== Developer Command: Opened Lock on Slot %d ===\n", slotNumber);
     Result res = { true, "", "Lock opened." };
-    publishResult("OPEN", slotNumber, res);
+    publishResult("OPEN", slotNumber, res, op);
     return;
   }
   if (action == "CLOSE") {
     targetPosition[slotNumber - 1] = LOCK_CLOSED;
     Serial.printf("=== Developer Command: Closed Lock on Slot %d ===\n", slotNumber);
     Result res = { true, "", "Lock closed." };
-    publishResult("CLOSE", slotNumber, res);
+    publishResult("CLOSE", slotNumber, res, op);
     return;
   }
 
-  startJob(slotNumber - 1, action == "BORROW");
+  startJob(slotNumber - 1, action == "BORROW", op);
 }
 
-// Parse a JSON command like {"action": "BORROW", "slot": 1}
+// Parse a JSON command like {"action": "BORROW", "slot": 1, "op": "3f9a1c2e"}
+// (op is optional: older servers don't send it)
 void handleCommand(const String &json) {
   Serial.print("MQTT command received: ");
   Serial.println(json);
@@ -749,7 +788,9 @@ void handleCommand(const String &json) {
 
   String action = doc["action"] | "";
   int slotNumber = doc["slot"].as<int>();
-  runAction(action, slotNumber);
+  String op = doc["op"] | "";
+  if (op.length() > 16) op = op.substring(0, 16);
+  runAction(action, slotNumber, op);
 }
 
 // ===================== Setup & Loop =====================
@@ -848,8 +889,8 @@ void loop() {
     cmd.trim();
     cmd.toLowerCase();
     if (cmd.length() == 2 && cmd[1] >= '1' && cmd[1] <= '4') {
-      if (cmd[0] == 'b') runAction("BORROW", cmd[1] - '0');
-      else if (cmd[0] == 'r') runAction("RETURN", cmd[1] - '0');
+      if (cmd[0] == 'b') runAction("BORROW", cmd[1] - '0', "");
+      else if (cmd[0] == 'r') runAction("RETURN", cmd[1] - '0', "");
     }
   }
 

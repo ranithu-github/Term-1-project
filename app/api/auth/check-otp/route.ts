@@ -2,14 +2,16 @@ import { NextResponse } from 'next/server';
 import { hashOtp, verifyVerificationToken } from '@/lib/auth-token';
 import { safeEqual } from '@/lib/otp';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { readJson, str } from '@/lib/http';
+import { LIMITS } from '@/lib/signup-rules';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({}));
-    const { index_no, code, verification_token } = body;
-
-    const cleanIndex = String(index_no || '').trim().toUpperCase();
-    const cleanCode = String(code || '').trim();
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const cleanIndex = str(parsed.body.index_no).toUpperCase();
+    const cleanCode = str(parsed.body.code);
+    const verification_token = str(parsed.body.verification_token);
 
     if (!cleanIndex || !cleanCode || !verification_token) {
       return NextResponse.json(
@@ -18,11 +20,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Rate limit OTP guesses (5 attempts per index every 15 mins)
+    // Rate limit code guesses per index and (generously) per network
     const ip = clientIp(request);
     if (
-      !rateLimit(`check-otp:idx:${cleanIndex}`, 5, 15 * 60 * 1000) ||
-      !rateLimit(`check-otp:ip:${ip}`, 20, 15 * 60 * 1000)
+      !(await rateLimit(`check-otp:idx:${cleanIndex}`, ...LIMITS.codeAccount)) ||
+      !(await rateLimit(`check-otp:ip:${ip}`, ...LIMITS.codeNetwork))
     ) {
       return NextResponse.json(
         { success: false, message: 'Too many attempts. Please request a new verification code.' },

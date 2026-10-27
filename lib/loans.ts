@@ -2,8 +2,15 @@ import { supabaseAdmin } from './supabase';
 import { OPEN_LOAN_STATUSES, BorrowRecord } from './types';
 
 /**
- * The student's open loan (ACTIVE or OVERDUE), newest first.
- * Marks it OVERDUE in the database once due_time has passed.
+ * Whether an open loan is past its due time. Worked out from due_time rather
+ * than written on read, so a read can never race a return and reopen a loan.
+ */
+export function isOverdue(loan: Pick<BorrowRecord, 'status' | 'due_time'>): boolean {
+  return loan.status === 'OVERDUE' || (loan.status === 'ACTIVE' && Boolean(loan.due_time) && new Date(loan.due_time).getTime() < Date.now());
+}
+
+/**
+ * The student's open loan (ACTIVE or OVERDUE), newest first. Read-only.
  */
 export async function findOpenLoan(indexNo: string): Promise<BorrowRecord | null> {
   const { data, error } = await supabaseAdmin
@@ -19,14 +26,7 @@ export async function findOpenLoan(indexNo: string): Promise<BorrowRecord | null
     throw new Error('LOAN_LOOKUP_FAILED');
   }
 
-  const loan = (data?.[0] as BorrowRecord | undefined) || null;
-
-  if (loan && loan.status === 'ACTIVE' && loan.due_time && new Date(loan.due_time).getTime() < Date.now()) {
-    await supabaseAdmin.from('borrow_records').update({ status: 'OVERDUE' }).eq('record_id', loan.record_id);
-    loan.status = 'OVERDUE';
-  }
-
-  return loan;
+  return (data?.[0] as BorrowRecord | undefined) || null;
 }
 
 /**

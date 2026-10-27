@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase';
-import { getCachedCabinetOnline } from './mqtt';
-import { getLastCabinetSnapshot, syncCabinetSlots } from './cabinet-sync';
+import { getCabinetState } from './cabinet-state';
+import { syncCabinetSlots } from './cabinet-sync';
 import { logActivity, raiseAlert, resolveAlerts } from './events';
 import { OPEN_LOAN_STATUSES } from './types';
 
@@ -26,13 +26,13 @@ export async function runAdminChecks() {
   if (Date.now() - lastCheckAt < CHECK_EVERY_MS) return;
   lastCheckAt = Date.now();
 
-  await checkCabinetOnline();
-  await checkSlots();
+  const state = await getCabinetState();
+  await checkCabinetOnline(state.online);
+  await checkSlots(state.slots);
   await checkOverdueLoans();
 }
 
-async function checkCabinetOnline() {
-  const online = getCachedCabinetOnline();
+async function checkCabinetOnline(online: boolean | null) {
   if (online === false) {
     await raiseAlert('CABINET_OFFLINE', 'critical', 'The umbrella cabinet is offline. Borrowing and returning are paused.', {
       actor: 'cabinet',
@@ -47,11 +47,10 @@ async function checkCabinetOnline() {
   if (online !== null) lastOnline = online;
 }
 
-async function checkSlots() {
-  const snapshot = getLastCabinetSnapshot();
-  if (!snapshot) return;
+async function checkSlots(slots: Awaited<ReturnType<typeof getCabinetState>>['slots']) {
+  if (!slots) return;
 
-  for (const s of snapshot.slots) {
+  for (const s of slots) {
     const slot = Number(s.slot);
     const key = `slot:${slot}`;
     if (s.busy) continue;
@@ -102,7 +101,9 @@ async function checkOverdueLoans() {
 
   for (const loan of loans) {
     if (loan.status === 'ACTIVE') {
-      await supabaseAdmin.from('borrow_records').update({ status: 'OVERDUE' }).eq('record_id', loan.record_id);
+      // Guarded: never reopens a loan that was returned a moment ago
+      await supabaseAdmin.from('borrow_records').update({ status: 'OVERDUE' })
+        .eq('record_id', loan.record_id).eq('status', 'ACTIVE').lt('due_time', new Date().toISOString());
     }
     const overdueMs = now - new Date(loan.due_time).getTime();
     if (overdueMs >= VERY_OVERDUE_MS) {

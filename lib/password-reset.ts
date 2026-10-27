@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase';
 import { sendPasswordResetOtpEmail } from './email';
 import { generateOtp } from './otp';
+import { hashResetCode } from './auth-token';
 import { raiseAlert } from './events';
 
 export type ResetResult =
@@ -50,8 +51,12 @@ export async function sendResetCode(indexNo: string): Promise<ResetResult> {
   const { error: updateError } = await supabaseAdmin
     .from('users')
     .update({
-      verification_code: otp,
-      verification_expires: expiresAt,
+      // Only a keyed hash of the code is stored, with a fresh budget of wrong attempts
+      reset_code_hash: hashResetCode(indexNo, otp),
+      reset_expires: expiresAt,
+      reset_attempts: 0,
+      verification_code: null,
+      verification_expires: null,
       updated_at: new Date().toISOString(),
     })
     .eq('index_no', indexNo);

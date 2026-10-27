@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getAdminIndex } from '@/lib/admin';
 import { runAdminChecks } from '@/lib/admin-checks';
-import { getLastCabinetSnapshot } from '@/lib/cabinet-sync';
-import { getCachedCabinetOnline } from '@/lib/mqtt';
+import { getCabinetState } from '@/lib/cabinet-state';
+import { isOverdue } from '@/lib/loans';
 import { OPEN_LOAN_STATUSES } from '@/lib/types';
 
 export const maxDuration = 30;
@@ -21,8 +21,8 @@ export async function GET() {
   try {
     await runAdminChecks();
 
-    const [slotsRes, loansRes, usersCount, alertsRes, activityRes] = await Promise.all([
-      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user').order('slot'),
+    const [slotsRes, loansRes, usersCount, alertsRes, activityRes, cabinetState] = await Promise.all([
+      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user, pending_action, pending_since').order('slot'),
       supabaseAdmin
         .from('borrow_records')
         .select('record_id, umbrella_id, index_no, borrowed_time, due_time, status')
@@ -42,18 +42,18 @@ export async function GET() {
         .eq('kind', 'ACTIVITY')
         .order('created_at', { ascending: false })
         .limit(15),
+      getCabinetState(),
     ]);
 
-    const snapshot = getLastCabinetSnapshot();
-    const openLoans = loansRes.data || [];
+    const openLoans = (loansRes.data || []).map((l) => ({ ...l, status: isOverdue(l) ? 'OVERDUE' : l.status }));
 
     return NextResponse.json({
       success: true,
       admin: adminIndex,
       cabinet: {
-        online: getCachedCabinetOnline(),
-        report_at: snapshot?.at ?? null,
-        slots: snapshot?.slots ?? [],
+        online: cabinetState.online,
+        report_at: cabinetState.slots_at ? new Date(cabinetState.slots_at).getTime() : null,
+        slots: cabinetState.slots ?? [],
       },
       slots: (slotsRes.data || []).map((s) => ({
         ...s,

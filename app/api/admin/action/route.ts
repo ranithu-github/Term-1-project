@@ -52,13 +52,16 @@ export async function POST(request: Request) {
 
       case 'slot.release': {
         if (!validSlot) return fail('Choose a slot from 1 to 4.');
-        const { data } = await supabaseAdmin
-          .from('umbrellas')
-          .update({ borrowed_user: null })
-          .eq('slot', slot)
-          .eq('availability', true)
-          .select('slot');
-        if (!data?.length) return fail(`Slot ${slot} isn't held.`);
+        const { data: held } = await supabaseAdmin.from('umbrellas').select('pending_op, pending_action, borrowed_user, availability').eq('slot', slot).maybeSingle();
+        if (held?.pending_action === 'BORROW' && held.pending_op) {
+          await supabaseAdmin.rpc('release_borrow', { p_op: held.pending_op });
+        } else if (held?.pending_action === 'RETURN' && held.pending_op) {
+          await supabaseAdmin.rpc('abort_return', { p_op: held.pending_op });
+        } else if (held?.availability && held.borrowed_user) {
+          await supabaseAdmin.from('umbrellas').update({ borrowed_user: null }).eq('slot', slot).eq('availability', true).is('pending_op', null);
+        } else {
+          return fail(`Slot ${slot} isn't held.`);
+        }
         await resolveAlerts('CABINET_NO_RESPONSE', `slot:${slot}`, actor);
         await log('ADMIN_SLOT_RELEASE', `Admin ${adminIndex} released the hold on Slot ${slot}`, { slot });
         return ok(`Slot ${slot} released.`);
@@ -68,10 +71,14 @@ export async function POST(request: Request) {
       case 'slot.markOut': {
         if (!validSlot) return fail('Choose a slot from 1 to 4.');
         const available = action === 'slot.markAvailable';
-        await supabaseAdmin
+        // Not while a borrow/return is in progress on it: release that first
+        const { data: changed } = await supabaseAdmin
           .from('umbrellas')
           .update(available ? { availability: true, borrowed_user: null } : { availability: false })
-          .eq('slot', slot);
+          .eq('slot', slot)
+          .is('pending_op', null)
+          .select('slot');
+        if (!changed?.length) return fail(`Slot ${slot} has a borrow or return in progress. Release it first.`, 409);
         if (available) await resolveAlerts('UMBRELLA_MISSING', `slot:${slot}`, actor);
         await log(available ? 'ADMIN_SLOT_AVAILABLE' : 'ADMIN_SLOT_OUT', `Admin ${adminIndex} marked Slot ${slot} as ${available ? 'available' : 'out'}`, { slot });
         return ok(`Slot ${slot} marked ${available ? 'available' : 'out'}.`);
@@ -79,13 +86,11 @@ export async function POST(request: Request) {
 
       // ---------------- Loans ----------------
       case 'loan.close': {
-        const { data: loan } = await supabaseAdmin.from('borrow_records').select('*').eq('record_id', body.record_id).maybeSingle();
-        if (!loan) return fail('Loan not found.', 404);
-        await supabaseAdmin
-          .from('borrow_records')
-          .update({ status: 'RETURNED', returned_time: new Date().toISOString() })
-          .eq('record_id', loan.record_id);
-        await supabaseAdmin.from('umbrellas').update({ availability: true, borrowed_user: null }).eq('umbrella_id', loan.umbrella_id);
+        // Guarded: only an open loan, and its slot is freed only if it's still out for this loan
+        const { data: closed, error } = await supabaseAdmin.rpc('admin_close_loan', { p_record: body.record_id });
+        if (error) return fail('Could not close the loan.', 500);
+        const loan = closed?.[0];
+        if (!loan) return fail('That loan is not open (already returned or not found).', 404);
         await resolveAlerts('LOAN_OVERDUE', loan.record_id, actor);
         await resolveAlerts('LOAN_VERY_OVERDUE', loan.record_id, actor);
         await log('ADMIN_LOAN_CLOSE', `Admin ${adminIndex} closed ${loan.index_no}'s loan (marked returned)`, {
@@ -96,11 +101,12 @@ export async function POST(request: Request) {
 
       case 'loan.extend': {
         const hours = Math.min(Math.max(Number(body.hours) || 24, 1), 24 * 14);
-        const { data: loan } = await supabaseAdmin.from('borrow_records').select('*').eq('record_id', body.record_id).maybeSingle();
-        if (!loan) return fail('Loan not found.', 404);
+        const { data: loan } = await supabaseAdmin.from('borrow_records').select('*').eq('record_id', body.record_id).in('status', [...OPEN_LOAN_STATUSES]).maybeSingle();
+        if (!loan) return fail('Only an open loan can be extended.', 404);
         const base = Math.max(new Date(loan.due_time).getTime(), Date.now());
         const newDue = new Date(base + hours * 60 * 60 * 1000).toISOString();
-        await supabaseAdmin.from('borrow_records').update({ due_time: newDue, status: 'ACTIVE' }).eq('record_id', loan.record_id);
+        await supabaseAdmin.from('borrow_records').update({ due_time: newDue, status: 'ACTIVE', reminder_sent_at: null })
+          .eq('record_id', loan.record_id).in('status', [...OPEN_LOAN_STATUSES]);
         await resolveAlerts('LOAN_OVERDUE', loan.record_id, actor);
         await resolveAlerts('LOAN_VERY_OVERDUE', loan.record_id, actor);
         await log('ADMIN_LOAN_EXTEND', `Admin ${adminIndex} extended ${loan.index_no}'s loan by ${hours} h`, {
@@ -112,7 +118,8 @@ export async function POST(request: Request) {
       case 'loan.delete': {
         const { data: loan } = await supabaseAdmin.from('borrow_records').select('*').eq('record_id', body.record_id).maybeSingle();
         if (!loan) return fail('Loan not found.', 404);
-        await supabaseAdmin.from('borrow_records').delete().eq('record_id', loan.record_id);
+        if (OPEN_LOAN_STATUSES.includes(loan.status)) return fail('This loan is still open. Close it first.', 409);
+        await supabaseAdmin.from('borrow_records').delete().eq('record_id', loan.record_id).eq('status', 'RETURNED');
         await log('ADMIN_LOAN_DELETE', `Admin ${adminIndex} deleted a loan record of ${loan.index_no} (${loan.status})`, {
           index_no: loan.index_no, details: { record_id: loan.record_id, umbrella_id: loan.umbrella_id, status: loan.status },
         });
@@ -150,8 +157,11 @@ export async function POST(request: Request) {
           .eq('index_no', indexNo)
           .in('status', [...OPEN_LOAN_STATUSES]);
         if (openLoans?.length) return fail(`${indexNo} still has an umbrella. Close the loan first.`);
-        await supabaseAdmin.from('umbrellas').update({ borrowed_user: null }).eq('borrowed_user', indexNo);
-        await supabaseAdmin.from('borrow_records').delete().eq('index_no', indexNo);
+        // Keep the loan history: an account with past loans is locked instead of deleted
+        const { count: pastLoans } = await supabaseAdmin.from('borrow_records').select('record_id', { count: 'exact', head: true }).eq('index_no', indexNo);
+        if (pastLoans) return fail(`${indexNo} has loan history, so the account can't be deleted. Lock it instead.`, 409);
+        const { data: busy } = await supabaseAdmin.from('umbrellas').select('slot').eq('borrowed_user', indexNo).limit(1);
+        if (busy?.length) return fail(`${indexNo} has a borrow in progress. Release Slot ${busy[0].slot} first.`, 409);
         const { error } = await supabaseAdmin.from('users').delete().eq('index_no', indexNo);
         if (error) return fail('Could not delete the user.', 500);
         await log('ADMIN_USER_DELETE', `Admin ${adminIndex} deleted the account ${indexNo}`, { index_no: indexNo });

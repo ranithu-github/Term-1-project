@@ -49,6 +49,7 @@ export async function GET(req: Request) {
       .update({ reminder_sent_at: nowIso, status: 'OVERDUE' })
       .eq('record_id', loan.record_id)
       .is('reminder_sent_at', null)
+      .in('status', [...OPEN_LOAN_STATUSES]) // never reopens a loan returned a moment ago
       .select('record_id');
     if (!claimed?.length) continue;
 

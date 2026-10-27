@@ -1,23 +1,23 @@
+import { supabaseAdmin } from './supabase';
+
 // =====================================================================
-// Simple fixed-window rate limiter.
-// NOTE: memory is per server instance. On Vercel each serverless instance
-// has its own counters, so this slows down guessing but is not a hard limit.
-// For production, back this with a shared store (Upstash Redis / Vercel KV).
+// Fixed-window rate limiter backed by Postgres (public.hit_rate_limit),
+// so every server instance shares the same counters.
+// If the database can't be reached the request is allowed: the routes
+// that use this need the database anyway and will fail on their own.
 // =====================================================================
 
-const buckets = new Map<string, { count: number; resetAt: number }>();
-
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-
-  if (!bucket || now > bucket.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.rpc('hit_rate_limit', {
+    p_key: key,
+    p_limit: limit,
+    p_window_s: Math.ceil(windowMs / 1000),
+  });
+  if (error) {
+    console.warn('⚠️ [RateLimit] Could not check limit:', error.message);
     return true;
   }
-
-  bucket.count += 1;
-  return bucket.count <= limit;
+  return data === true;
 }
 
 export function clientIp(request: Request): string {
