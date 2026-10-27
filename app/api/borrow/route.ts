@@ -100,7 +100,8 @@ export async function POST(request: Request) {
     //   1. {"type":"assigned",...} straight away, so the phone shows the right slot
     //      while the lock is still opening (two students borrowing at once get
     //      different slots and each must know which one is theirs)
-    //   2. {"type":"result",...} once the cabinet has answered
+    //   2. {"type":"opened",...} when the cabinet confirms it got the command
+    //   3. {"type":"result",...} once the cabinet has answered
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -116,7 +117,8 @@ export async function POST(request: Request) {
 
         let outcome: Record<string, unknown>;
         try {
-          const done = await completeBorrow(indexNo, { slot, umbrella_id, op });
+          // The cabinet has the command: the lock is opening now
+          const done = await completeBorrow(indexNo, { slot, umbrella_id, op }, () => send({ type: 'opened', slot, at: Date.now() }));
           outcome = done.body;
           receipt = done.receipt;
         } catch (error) {
@@ -154,11 +156,12 @@ export async function POST(request: Request) {
  */
 async function completeBorrow(
   indexNo: string,
-  claimed: { slot: number; umbrella_id: string; op: string }
+  claimed: { slot: number; umbrella_id: string; op: string },
+  onOpened: () => void
 ): Promise<{ body: Record<string, unknown>; receipt: (() => Promise<void>) | null }> {
   const release = () => supabaseAdmin.rpc('release_borrow', { p_op: claimed.op });
 
-  const result = await runCabinetCommand('BORROW', claimed.slot, 45000, claimed.op.slice(0, 8));
+  const result = await runCabinetCommand('BORROW', claimed.slot, 45000, claimed.op.slice(0, 8), onOpened);
 
   if (!result.ok) {
     if (outcomeUncertain(result)) {

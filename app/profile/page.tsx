@@ -1,134 +1,90 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Hash,
-  Mail,
-  LogOut,
-} from 'lucide-react';
-import { BottomNav } from '@/components/BottomNav';
-import { StormHeader } from '@/components/Storm';
-import type { MeResponse } from '@/lib/types';
-import { formatStationDueTime } from '@/lib/time';
-import { beginStationRequest, clearStationCache, isCurrentStationRequest, restoreStationUser, setStationResponse, useStationCache } from '@/lib/stationCache';
-import '../theme-pages.css';
+import { ChevronRight, LogOut, ShieldCheck } from 'lucide-react';
+import { Spinner, TabBar } from '@/components/ui';
+import { useStation } from '@/lib/useStation';
+import { clearStationCache } from '@/lib/stationCache';
+import { formatStationDue } from '@/lib/time';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const station = useStationCache();
-  const profile = station.me?.user ?? station.user ?? { index_no: '', username: '', email: '' };
-  const activeBorrow = station.me?.active_loan ?? null;
-  const [loading, setLoading] = useState(true);
+  const { me, user } = useStation();
+  const [signingOut, setSigningOut] = useState(false);
+  const loan = me?.active_loan ?? null;
+  const initials = (user?.username || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
 
-  useEffect(() => {
-    restoreStationUser();
-    const fetchUserData = async () => {
-      const request = beginStationRequest();
-      // Profile and loan come from the server, based on the session cookie
-      try {
-        const res = await fetch('/api/me', { cache: 'no-store' });
-        if (!isCurrentStationRequest(request)) return;
-
-        if (res.status === 401) {
-          // No session, or the account no longer exists: back to sign in
-          clearStationCache();
-          localStorage.removeItem('astrix_user');
-          sessionStorage.clear();
-          router.replace('/login?notice=session_expired');
-          return;
-        }
-
-        const json: MeResponse = await res.json();
-        if (!res.ok || !json.success) return;
-        setStationResponse(json, request);
-      } catch (err) {
-        console.warn('Profile lookup warning:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserData();
-    const interval = setInterval(fetchUserData, 5000);
-    return () => clearInterval(interval);
-  }, [router]);
-
-  const handleSignOut = async () => {
+  const signOut = async () => {
+    setSigningOut(true);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {}
+    } catch {
+      // the cookie is cleared on the next request anyway
+    }
     clearStationCache();
     localStorage.removeItem('astrix_user');
     sessionStorage.clear();
-    router.push('/login');
-  };
-
-  // Get initials for avatar
-  const getInitials = (name: string) => {
-    const parts = name.split(' ').filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase() || 'UOM';
+    router.replace('/login');
   };
 
   return (
-    <div className="astrix-theme-page select-none overflow-y-auto">
-      <StormHeader rain className="astrix-theme-header profile">
-        <h1 className="astrix-theme-title">Your profile</h1>
-      </StormHeader>
-
-      <main className="astrix-theme-sheet space-y-4" aria-busy={loading}>
-        <section className="astrix-profile-card" aria-label="Student profile">
-          <div className="astrix-avatar" aria-hidden="true">{getInitials(profile.username)}</div>
+    <div className="flex min-h-[100dvh] flex-col">
+      <main className="flex flex-1 flex-col gap-4 px-4 pb-6 pt-[calc(var(--safe-top)+24px)]">
+        <section className="card enter flex items-center gap-4 p-5" aria-label="Your account">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-navy text-xl font-bold text-white" aria-hidden="true">{initials}</div>
           <div className="min-w-0">
-            <h2 className="astrix-profile-name">{profile.username || 'Student'}</h2>
-            <span className="astrix-verified-pill"><i aria-hidden="true" /> Verified student</span>
+            <h1 className="truncate text-[1.375rem] font-bold leading-tight tracking-[-0.015em]">{user?.username || ' '}</h1>
+            <p className="num text-[0.9375rem] text-ink-2">{user?.index_no}</p>
           </div>
         </section>
 
-        <section className="astrix-profile-loan" aria-label="Current umbrella status">
-          {activeBorrow ? (
-            <>
-              <h2>Return to Slot {activeBorrow.slot ?? '?'}</h2>
-              <p>{activeBorrow.is_overdue ? 'Overdue' : 'Due'} {formatStationDueTime(activeBorrow.due_time)}</p>
-            </>
-          ) : (
-            <>
-              <h2>Ready to borrow</h2>
-              <p>No umbrella on loan. Visit the station when you need one.</p>
-              <Link href="/dashboard" className="relative z-10 inline-block mt-4 text-xs font-bold text-white underline underline-offset-4">View station</Link>
-            </>
+        <section className="card enter enter-1 overflow-hidden" aria-label="Details">
+          <dl className="divide-y divide-line/10">
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <dt className="text-[0.9375rem] text-ink-2">Email</dt>
+              <dd className="truncate text-right font-medium">{user?.email || '—'}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <dt className="text-[0.9375rem] text-ink-2">Umbrella</dt>
+              <dd className="text-right font-medium">
+                {!me ? <Spinner className="h-4 w-4 text-ink-3" /> : loan ? <>Umbrella <span className="num">{loan.slot}</span> · due {formatStationDue(loan.due_time)}</> : 'None on loan'}
+              </dd>
+            </div>
+          </dl>
+          {loan && (
+            <Link href="/dashboard" className="flex items-center justify-between border-t border-line/10 px-5 py-4 font-semibold text-blue">
+              Return umbrella <ChevronRight className="h-5 w-5" aria-hidden="true" />
+            </Link>
           )}
-          <svg className="astrix-profile-loan-umbrella" viewBox="0 0 300 220" fill="none" aria-hidden="true">
-            <g stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M75 130c5-42 42-70 86-79 51-11 98 3 117 35" />
-              <path d="M75 130c15-14 31-18 51-11 17-14 34-17 51-10 15-15 31-19 50-12 14-16 32-19 51-11" />
-              <path d="M161 51c-17 17-27 40-35 68M161 51c26 10 49 26 66 46" />
-              <path d="m155 27 6 24 31 130c4 19 31 26 34 7" />
-            </g>
-          </svg>
         </section>
 
-        <section className="space-y-3" aria-label="Account details">
-          <div className="astrix-profile-detail">
-            <span className="astrix-profile-detail-icon"><Hash size={18} aria-hidden="true" /></span>
-            <div className="astrix-profile-detail-text"><span>Index number</span><strong>{profile.index_no}</strong></div>
-          </div>
-          <div className="astrix-profile-detail">
-            <span className="astrix-profile-detail-icon"><Mail size={18} aria-hidden="true" /></span>
-            <div className="astrix-profile-detail-text"><span>University email</span><strong>{profile.email}</strong></div>
-          </div>
+        <section className="card enter enter-2 p-5" aria-labelledby="how-title">
+          <h2 id="how-title" className="text-[1.0625rem] font-bold">How it works</h2>
+          <ol className="mt-3 space-y-2.5 text-[0.9375rem] text-ink-2">
+            <li className="flex gap-3"><span className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky text-[0.8125rem] font-bold text-blue">1</span>At the umbrella station, tap Borrow. The app tells you which slot opens.</li>
+            <li className="flex gap-3"><span className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky text-[0.8125rem] font-bold text-blue">2</span>Take the umbrella within about 12 seconds.</li>
+            <li className="flex gap-3"><span className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky text-[0.8125rem] font-bold text-blue">3</span>Return it to the same slot within 24 hours: tap Return, then push it fully in.</li>
+          </ol>
         </section>
 
-        <button type="button" onClick={handleSignOut} className="astrix-sign-out">
-          <LogOut size={18} aria-hidden="true" /> Sign out
-        </button>
+        {me?.is_admin && (
+          <Link href="/admin" className="card enter enter-2 flex items-center gap-3 p-5 font-semibold">
+            <ShieldCheck className="h-5 w-5 text-blue" strokeWidth={2} aria-hidden="true" />
+            <span className="flex-1">Staff · Admin panel</span>
+            <ChevronRight className="h-5 w-5 text-ink-3" aria-hidden="true" />
+          </Link>
+        )}
+
+        <div className="enter enter-3 mt-2">
+          <button type="button" onClick={signOut} disabled={signingOut} className="btn btn-lg w-full bg-card text-danger shadow-1">
+            {signingOut ? <Spinner className="h-5 w-5" /> : <LogOut className="h-5 w-5" strokeWidth={2} aria-hidden="true" />} Sign out
+          </button>
+          {loan && <p className="mt-2 text-center text-[0.8125rem] text-ink-2">Signing out doesn&apos;t end your loan.</p>}
+        </div>
       </main>
-
-      <BottomNav />
+      <TabBar />
     </div>
   );
 }

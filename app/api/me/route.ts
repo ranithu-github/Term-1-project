@@ -49,7 +49,7 @@ export async function GET() {
     }
 
     const [{ data: dbSlots, error: slotsError }, cabinet] = await Promise.all([
-      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user, pending_op').order('slot', { ascending: true }),
+      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user, pending_op, pending_action').order('slot', { ascending: true }),
       getCabinetState(),
     ]);
 
@@ -65,6 +65,11 @@ export async function GET() {
       availability: Boolean(s.availability) && !s.borrowed_user && !s.pending_op,
     }));
 
+    const mine = (dbSlots || []).find((s) => s.borrowed_user === indexNo && (s.pending_op || s.availability));
+    const pending = mine
+      ? { action: (mine.pending_action || 'BORROW') as 'BORROW' | 'RETURN', slot: mine.slot }
+      : null;
+
     const isDev = isDevIndex(indexNo);
     const loan = isDev ? null : await findOpenLoan(indexNo);
 
@@ -75,6 +80,7 @@ export async function GET() {
       is_admin: isAdminIndex(indexNo),
       cabinet_online: cabinet.online,
       slots,
+      pending,
       active_loan: loan
         ? {
             record_id: loan.record_id,

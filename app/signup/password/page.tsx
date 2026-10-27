@@ -1,180 +1,93 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Check, AlertCircle } from 'lucide-react';
-import { StormHeader } from '@/components/Storm';
-import { SignupProgress } from '@/components/SignupProgress';
+import { CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Field, Notice, Spinner, StepBar, StepHeading, TopBar } from '@/components/ui';
+import { clearSignup, readSignup } from '@/lib/signupState';
 import { seedStationUser } from '@/lib/stationCache';
-import '../../theme-pages.css';
 
-export default function SignUpPasswordPage() {
+const MIN_PASSWORD = 8;
+
+// Signup step 4: set a password; the account is created and the student is signed in
+export default function SignupPasswordPage() {
   const router = useRouter();
-
-  const [indexNo, setIndexNo] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-
-  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedIndex = localStorage.getItem('astrix_pending_index') || sessionStorage.getItem('astrix_verified_index') || '';
-    const storedName = localStorage.getItem('astrix_pending_name') || '';
-    const storedEmail = localStorage.getItem('astrix_pending_email') || '';
-    const storedCode = sessionStorage.getItem('astrix_verified_code') || '';
-
-    if (!storedIndex || !storedCode) {
-      // If no verified OTP session exists, redirect back to details
-      router.replace('/signup/details');
-      return;
-    }
-
-    setIndexNo(storedIndex);
-    setUsername(storedName);
-    setEmail(storedEmail);
-    setCode(storedCode);
+    const s = readSignup();
+    if (!s.index_no || !s.verification_token || !s.code) router.replace('/signup/details');
   }, [router]);
 
-  const handleCreateAccount = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    const cleanPass = password.trim();
-    if (!cleanPass || cleanPass.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (cleanPass !== confirmPassword.trim()) {
-      setError('Passwords do not match. Please verify.');
-      return;
-    }
-
-    setLoading(true);
-
+    const s = readSignup();
+    setBusy(true);
     try {
-      const token = localStorage.getItem('astrix_verification_token') || undefined;
-
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          index_no: indexNo,
-          code: code,
-          password: cleanPass,
-          verification_token: token,
-        }),
+        body: JSON.stringify({ index_no: s.index_no, code: s.code, password, verification_token: s.verification_token }),
       });
-
-      const json = await res.json();
-
+      const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
-        setError(json.message || 'Registration failed. Please try again.');
-        setLoading(false);
+        setError(json.message || 'We couldn’t create your account. Try again.');
+        setBusy(false);
         return;
       }
-
-      // Cleanup signup storage
-      localStorage.removeItem('astrix_verification_token');
-      localStorage.removeItem('astrix_pending_index');
-      localStorage.removeItem('astrix_pending_email');
-      localStorage.removeItem('astrix_pending_name');
-      sessionStorage.removeItem('astrix_verified_code');
-      sessionStorage.removeItem('astrix_verified_index');
-
-      // Cache user info for instant display
-      if (json.user) {
-        localStorage.setItem('astrix_user', JSON.stringify(json.user));
-        seedStationUser(json.user);
-      }
-
-      // Direct redirect to Dashboard!
-      router.push('/dashboard');
-    } catch (err: any) {
-      console.warn('Account creation failed:', err.message);
-      setError('Could not connect to the server. Please check your connection.');
-      setLoading(false);
+      clearSignup();
+      localStorage.setItem('astrix_user', JSON.stringify(json.user));
+      seedStationUser(json.user);
+      setDone(json.user?.username?.split(' ')[0] || '');
+    } catch {
+      setError('You’re offline. Connect to the internet and try again.');
+      setBusy(false);
     }
   };
 
+  if (done !== null) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col px-6 pb-[calc(var(--safe-bottom)+24px)] pt-[calc(var(--safe-top)+64px)]">
+        <div className="flex flex-1 flex-col items-center text-center" role="status">
+          <CheckCircle2 className="enter h-16 w-16 text-success" strokeWidth={1.75} aria-hidden="true" />
+          <h1 className="enter enter-1 mt-5 text-[2rem] font-bold leading-tight tracking-[-0.025em]">You&apos;re ready to borrow{done ? `, ${done}` : ''}</h1>
+          <p className="enter enter-2 mt-3 text-[1.0625rem] leading-relaxed text-ink-2">At the umbrella station, open ASTRIX and tap Borrow. Return it within 24 hours.</p>
+        </div>
+        <button type="button" className="btn btn-primary btn-lg w-full" onClick={() => router.replace('/dashboard')}>Go to home</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="astrix-theme-page select-none overflow-y-auto">
-      <StormHeader rain className="astrix-theme-header password">
-        <div className="astrix-header-top">
-          <button type="button" onClick={() => router.push('/signup/details')} className="astrix-header-back" aria-label="Back to student details">
-            <ArrowLeft size={21} /> <span>Back</span>
-          </button>
-          <span className="astrix-step-count">Step 3 of 3</span>
-        </div>
-        <h1 className="astrix-theme-title">Set your password</h1>
-      </StormHeader>
-
-      <main className="astrix-theme-sheet">
-        <SignupProgress step={3} />
-
-        <div className="astrix-verified-card" aria-label="Verified student account">
-          <span className="astrix-verified-check"><Check size={22} strokeWidth={3} aria-hidden="true" /></span>
-          <div>
-            <strong>{username || 'Student'}</strong>
-            <span>{indexNo}</span>
-            <span>{email}</span>
-          </div>
-        </div>
-
-        <form onSubmit={handleCreateAccount} className="astrix-flow-fields">
-          {error && (
-            <div role="alert" className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" /> <span>{error}</span>
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="new-password" className="astrix-flow-label">Password</label>
-            <div className="astrix-password-wrap">
-              <Lock size={18} className="astrix-password-icon" aria-hidden="true" />
-              <input id="new-password" type={showPassword ? 'text' : 'password'} value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
-                autoComplete="new-password" minLength={6} required className="astrix-flow-input" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="astrix-password-eye" aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-[#7184a2]">At least 6 characters</p>
-          </div>
-
-          <div>
-            <label htmlFor="confirm-password" className="astrix-flow-label">Confirm password</label>
-            <div className="astrix-password-wrap">
-              <Lock size={18} className="astrix-password-icon" aria-hidden="true" />
-              <input id="confirm-password" type={showConfirm ? 'text' : 'password'} value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter your password"
-                autoComplete="new-password" minLength={6} required className="astrix-flow-input" />
-              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="astrix-password-eye" aria-label={showConfirm ? 'Hide confirmation' : 'Show confirmation'}>
-                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <button type="submit" disabled={loading || password.length < 6 || password !== confirmPassword} className="astrix-flow-button mt-1">
-            {loading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Create account <ArrowRight size={18} /></>}
-          </button>
-        </form>
-
-        <p className="astrix-flow-hint mt-5 flex items-center justify-center gap-2">
-          <Check size={16} className="text-emerald-600" aria-hidden="true" /> Your university ID is verified.
-        </p>
-        <div className="astrix-flow-footer">
-          <Link href="/login" className="astrix-flow-link">Already registered? Sign in</Link>
-        </div>
-      </main>
+    <div className="flex min-h-[100dvh] flex-col">
+      <TopBar title="Create account" back={{ href: '/signup/details', label: 'Back to email code' }} />
+      <form onSubmit={submit} className="flex flex-1 flex-col gap-6 px-6 pb-[calc(var(--safe-bottom)+24px)] pt-5" noValidate>
+        <StepBar step={4} of={4} />
+        <StepHeading step={4} of={4} title="Set your password">You&apos;ll use it with your index number to sign in.</StepHeading>
+        <Field
+          label="Password"
+          type={show ? 'text' : 'password'}
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          hint={`At least ${MIN_PASSWORD} characters. A password manager suggestion works too.`}
+          autoFocus
+          trailing={
+            <button type="button" onClick={() => setShow(!show)} className="btn btn-plain h-11 w-11 min-h-0 rounded-full p-0 text-ink-2" aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}>
+              {show ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+            </button>
+          }
+        />
+        {error && <Notice tone="danger" title={error} live="assertive" />}
+        <button type="submit" className="btn btn-primary btn-lg mt-auto w-full" disabled={busy || password.trim().length < MIN_PASSWORD}>
+          {busy ? <><Spinner className="h-5 w-5" /> Creating account…</> : 'Create account'}
+        </button>
+      </form>
     </div>
   );
 }

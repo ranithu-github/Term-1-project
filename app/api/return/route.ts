@@ -90,76 +90,52 @@ export async function POST(request: Request) {
     const slot = begin.slot;
     const op = begin.op;
 
-    const result = await runCabinetCommand('RETURN', slot, 45000, op.slice(0, 8));
-
-    if (!result.ok) {
-      if (outcomeUncertain(result)) {
-        // The slot may have opened. Keep the return pending: the slot sync closes the loan
-        // if the umbrella is back, or clears the pending return if the slot is still empty.
-        await raiseAlert('CABINET_NO_RESPONSE', 'warning', `No result from the cabinet for ${indexNo}'s return to Slot ${slot} (${result.error}). It settles from the cabinet's slot report.`, {
-          slot, index_no: indexNo, actor: 'cabinet', dedupeKey: `slot:${slot}`,
-        });
-      } else {
-        await supabaseAdmin.rpc('abort_return', { p_op: op });
-      }
-      await logActivity('RETURN_FAILED', `${indexNo}'s return to Slot ${slot} failed: ${result.error}`, {
-        slot, index_no: indexNo, actor: indexNo,
-      });
-      return NextResponse.json(
-        { success: false, uncertain: outcomeUncertain(result), message: cabinetErrorMessage(result.error, 'RETURN'), slot },
-        { status: cabinetErrorStatus(result.error) }
-      );
-    }
-
-    // Case 4 / Case 5: loan stays open
-    if (result.response.status !== 'SUCCESS') {
-      await supabaseAdmin.rpc('abort_return', { p_op: op });
-      if (result.response.reason === 'WRONG_UMBRELLA') {
-        await raiseAlert('WRONG_UMBRELLA_RETURNED', 'critical', `${indexNo} put the wrong umbrella in Slot ${slot}. The slot was left unlocked.`, {
-          slot, index_no: indexNo, actor: indexNo,
-        });
-      }
-      await logActivity('RETURN_FAILED', `${indexNo}'s return to Slot ${slot}: ${result.response.reason}`, {
-        slot, index_no: indexNo, actor: indexNo,
-      });
-      return NextResponse.json({ success: false, message: result.response.message, reason: result.response.reason, slot });
-    }
-
-    // Case 3: right umbrella is back — close the loan and free the slot, in one transaction
-    const { data: closedRows, error: closeError } = await supabaseAdmin.rpc('complete_return', { p_op: op });
-    const closed = closedRows?.[0] as { umbrella_id: string; borrowed_time: string } | undefined;
-    if (closeError || !closed) {
-      console.error('❌ [API/Return] complete_return failed:', closeError?.message || 'operation not found');
-      await raiseAlert('RETURN_NOT_RECORDED', 'critical', `${indexNo}'s umbrella is back in Slot ${slot} but the loan could not be closed: ${closeError?.message || 'the return was no longer pending'}`, {
-        slot, index_no: indexNo, actor: 'system',
-      });
-      return NextResponse.json(
-        { success: false, message: 'Your umbrella is back, but the loan could not be closed yet. It will be fixed automatically; contact the station team if it still shows tomorrow.', slot },
-        { status: 500 }
-      );
-    }
-
-    const durationStr = formatLoanDuration(closed.borrowed_time);
-    await logActivity('RETURN', `${indexNo} returned Umbrella ${slot} to Slot ${slot} (${durationStr})`, {
-      slot, index_no: indexNo, actor: indexNo,
-    });
-
-    // Return receipt email, after the response
+    // Receipt email after the response has finished
+    let receipt: (() => Promise<void>) | null = null;
+    let streamDone: () => void = () => {};
+    const finished = new Promise<void>((resolve) => (streamDone = resolve));
     after(async () => {
-      try {
-        const { data: user } = await supabaseAdmin.from('users').select('email, username').eq('index_no', indexNo).maybeSingle();
-        if (user?.email) await sendReturnReceiptEmail(user.email, user.username || 'Student', slot, closed.umbrella_id, durationStr);
-      } catch (e) {
-        console.warn('⚠️ [API/Return] Receipt email warning:', e);
-      }
+      await finished;
+      if (receipt) await receipt().catch((e) => console.warn('⚠️ [API/Return] Receipt email warning:', e));
     });
 
-    return NextResponse.json({
-      success: true,
-      message: result.response.message,
-      slot,
-      umbrella_id: closed.umbrella_id,
-      duration: durationStr,
+    // Streamed like a borrow: "assigned" (which slot opens), "opened" (the cabinet
+    // has the command), then "result"
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: Record<string, unknown>) => {
+          try {
+            controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
+          } catch {
+            // The phone disconnected; keep going so the loan is still closed correctly
+          }
+        };
+        send({ type: 'assigned', slot, umbrella_number: slot, umbrella_id: begin.umbrella_id });
+
+        let outcome: Record<string, unknown>;
+        try {
+          const done = await completeReturn(indexNo, slot, op, () => send({ type: 'opened', slot, at: Date.now() }));
+          outcome = done.body;
+          receipt = done.receipt;
+        } catch (error) {
+          console.error('❌ [API/Return] Error:', error);
+          outcome = { success: false, message: 'Return request failed. Please try again.', slot };
+        }
+        send({ type: 'result', ...outcome });
+        try {
+          controller.close();
+        } catch {}
+        streamDone();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error: any) {
     console.error('❌ [API/Return] Error:', error);
@@ -168,4 +144,76 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ success: false, message: 'Return request failed. Please try again.' }, { status: 500 });
   }
+}
+
+/**
+ * Sends RETURN for the student's home slot, waits for the cabinet, and closes or
+ * keeps the loan. Returns the result body for the phone and the receipt to send afterwards.
+ */
+async function completeReturn(
+  indexNo: string,
+  slot: number,
+  op: string,
+  onOpened: () => void
+): Promise<{ body: Record<string, unknown>; receipt: (() => Promise<void>) | null }> {
+  const result = await runCabinetCommand('RETURN', slot, 45000, op.slice(0, 8), onOpened);
+
+  if (!result.ok) {
+    if (outcomeUncertain(result)) {
+      // The slot may have opened. Keep the return pending: the slot sync closes the loan
+      // if the umbrella is back, or clears the pending return if the slot is still empty.
+      await raiseAlert('CABINET_NO_RESPONSE', 'warning', `No result from the cabinet for ${indexNo}'s return to Slot ${slot} (${result.error}). It settles from the cabinet's slot report.`, {
+        slot, index_no: indexNo, actor: 'cabinet', dedupeKey: `slot:${slot}`,
+      });
+    } else {
+      await supabaseAdmin.rpc('abort_return', { p_op: op });
+    }
+    await logActivity('RETURN_FAILED', `${indexNo}'s return to Slot ${slot} failed: ${result.error}`, {
+      slot, index_no: indexNo, actor: indexNo,
+    });
+    return { body: { success: false, uncertain: outcomeUncertain(result), message: cabinetErrorMessage(result.error, 'RETURN'), slot }, receipt: null };
+  }
+
+  // Case 4 / Case 5: loan stays open
+  if (result.response.status !== 'SUCCESS') {
+    await supabaseAdmin.rpc('abort_return', { p_op: op });
+    if (result.response.reason === 'WRONG_UMBRELLA') {
+      await raiseAlert('WRONG_UMBRELLA_RETURNED', 'critical', `${indexNo} put the wrong umbrella in Slot ${slot}. The slot was left unlocked.`, {
+        slot, index_no: indexNo, actor: indexNo,
+      });
+    }
+    await logActivity('RETURN_FAILED', `${indexNo}'s return to Slot ${slot}: ${result.response.reason}`, {
+      slot, index_no: indexNo, actor: indexNo,
+    });
+    return { body: { success: false, message: result.response.message, reason: result.response.reason, slot }, receipt: null };
+  }
+
+  // Case 3: right umbrella is back — close the loan and free the slot, in one transaction
+  const { data: closedRows, error: closeError } = await supabaseAdmin.rpc('complete_return', { p_op: op });
+  const closed = closedRows?.[0] as { umbrella_id: string; borrowed_time: string } | undefined;
+  if (closeError || !closed) {
+    console.error('❌ [API/Return] complete_return failed:', closeError?.message || 'operation not found');
+    await raiseAlert('RETURN_NOT_RECORDED', 'critical', `${indexNo}'s umbrella is back in Slot ${slot} but the loan could not be closed: ${closeError?.message || 'the return was no longer pending'}`, {
+      slot, index_no: indexNo, actor: 'system',
+    });
+    return {
+      body: { success: false, message: 'Your umbrella is back, but the loan could not be closed yet. It will be fixed automatically; contact the station team if it still shows tomorrow.', slot },
+      receipt: null,
+    };
+  }
+
+  const durationStr = formatLoanDuration(closed.borrowed_time);
+  await logActivity('RETURN', `${indexNo} returned Umbrella ${slot} to Slot ${slot} (${durationStr})`, {
+    slot, index_no: indexNo, actor: indexNo,
+  });
+
+  const receipt = async () => {
+    const { data: user } = await supabaseAdmin.from('users').select('email, username').eq('index_no', indexNo).maybeSingle();
+    if (user?.email) await sendReturnReceiptEmail(user.email, user.username || 'Student', slot, closed.umbrella_id, durationStr);
+  };
+
+  return {
+    body: { success: true, message: result.response.message, slot, umbrella_id: closed.umbrella_id, duration: durationStr },
+    receipt,
+  };
 }

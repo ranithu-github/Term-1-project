@@ -1,61 +1,46 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss';
+
+// Colors come from the CSS variables in app/globals.css, so Tailwind and the
+// component classes always agree.
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
 
 const config: Config = {
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ['./components/**/*.{ts,tsx}', './app/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        astrix: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-        },
-        // Rainy blue theme: rich blue on white
-        brand: {
-          50: '#f1f5fd',
-          100: '#e2eafa',
-          200: '#c3d3f4',
-          300: '#94b0ea',
-          500: '#2f5fd0',
-          600: '#1f4fc2',
-          700: '#183f9e',
-          900: '#0f1e3d',
-        },
+        navy: token('navy'),
+        blue: { DEFAULT: token('blue'), press: token('blue-press') },
+        sky: token('sky'),
+        paper: token('paper'),
+        card: token('card'),
+        ink: { DEFAULT: token('ink'), 2: token('ink-2'), 3: token('ink-3') },
+        line: token('line'),
+        success: { DEFAULT: token('success'), bg: token('success-bg') },
+        caution: { DEFAULT: token('caution'), bg: token('caution-bg') },
+        danger: { DEFAULT: token('danger'), bg: token('danger-bg') },
+        // legacy palette, still used by the admin panel
+        brand: { 50: '#f1f5fd', 100: '#e2eafa', 200: '#c3d3f4', 300: '#94b0ea', 500: '#2f5fd0', 600: '#1f4fc2', 700: '#183f9e', 900: '#0f1e3d' },
       },
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],
-        body: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        body: ['var(--font-body)', '-apple-system', 'system-ui', 'sans-serif'],
       },
-      // Matches the welcome screen background
-      backgroundImage: {
-        storm:
-          'radial-gradient(120% 80% at 50% 0%, #3b6fe0 0%, transparent 60%), linear-gradient(180deg, #183f9e 0%, #0f1e3d 100%)',
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
       },
-      keyframes: {
-        drip: {
-          '0%': { transform: 'translateY(0)', opacity: '0' },
-          '15%': { opacity: '1' },
-          '100%': { transform: 'translateY(22px)', opacity: '0' },
-        },
-        rise: {
-          from: { transform: 'translateY(14px)', opacity: '0' },
-          to: { transform: 'none', opacity: '1' },
-        },
+      boxShadow: {
+        1: 'var(--shadow-1)',
+        2: 'var(--shadow-2)',
       },
-      animation: {
-        drip: 'drip 1.1s linear infinite',
-        rise: 'rise .5s cubic-bezier(.2, .8, .3, 1) both',
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
+        'in-out': 'var(--ease-in-out)',
+        standard: 'var(--ease-standard)',
+        drawer: 'var(--ease-drawer)',
       },
     },
   },

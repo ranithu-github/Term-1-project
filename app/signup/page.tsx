@@ -1,29 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  AlertTriangle,
-  ShieldCheck,
-  RefreshCw,
-  Flashlight,
-  Upload,
-  ArrowRight,
-  UserCheck,
-} from 'lucide-react';
-import { StormHeader } from '@/components/Storm';
-import { SignupProgress } from '@/components/SignupProgress';
+import { Camera, CheckCircle2, Flashlight, ImageUp, RotateCcw } from 'lucide-react';
+import { Notice, Spinner, StepBar, StepHeading, TopBar } from '@/components/ui';
 import { useBarcodeScanner, type ScannerError } from '@/lib/barcode/useBarcodeScanner';
-import '../theme-pages.css';
-import './scanner.css';
+import { clearSignup, writeSignup } from '@/lib/signupState';
 
 // The UoM student ID barcode contains only the index number: 6 digits + a letter
 const INDEX_PATTERN = /^[0-9]{6}[A-Z]$/;
 
 // A live result is accepted only after the same index is read this many times in a
-// row, so a one-character misread of a 1D barcode can't create the wrong account
+// row (one read per camera frame), so a misread can't create the wrong account
 const CONFIRM_READS = 2;
 
 // Developer shortcuts and the raw-scan readout only exist in local development builds
@@ -36,365 +25,211 @@ const parseIndex = (rawText: string): string | null => {
   return INDEX_PATTERN.test(cleaned) ? cleaned : null;
 };
 
-const CAMERA_ERRORS: Record<ScannerError, string> = {
-  denied: 'Camera permission denied. Please allow camera access in your browser settings to scan your ID.',
-  'no-camera': 'No camera detected on this device. You can upload a photo of your ID barcode below.',
-  unsupported: 'This browser can’t open the camera here. Please upload a photo of your ID barcode below.',
-  failed: 'Could not start camera. Please refresh or upload a photo of your ID barcode below.',
+const CAMERA_ERRORS: Record<ScannerError, { title: string; body: string }> = {
+  denied: { title: 'Camera access is off', body: 'Allow camera access for this site in your browser settings, or upload a photo of the barcode instead.' },
+  'no-camera': { title: 'No camera found', body: 'Upload a photo of the barcode on your student ID instead.' },
+  unsupported: { title: 'This browser can’t open the camera here', body: 'Upload a photo of the barcode on your student ID instead.' },
+  failed: { title: 'The camera didn’t start', body: 'Try again, or upload a photo of the barcode instead.' },
 };
 
-export default function BarcodeScanPage() {
+type Read = { index: string; exists: boolean } | null;
+
+// Signup step 1: read the index number from the barcode on the student ID
+export default function ScanPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
+  const pausedRef = useRef(false);
+  const lastRead = useRef<{ index: string; count: number }>({ index: '', count: 0 });
+  const badReads = useRef(0);
 
-  // Guards that must not wait for a re-render (the decode callback runs many times a second)
-  const busyRef = useRef(false);                                // an index is being checked
-  const pausedForBackgroundRef = useRef(false);
-  const lastReadRef = useRef<{ index: string; count: number }>({ index: '', count: 0 });
+  const [read, setRead] = useState<Read>(null);
+  const [checking, setChecking] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [rawScan, setRawScan] = useState<string | null>(null); // dev builds only
 
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [existingUserError, setExistingUserError] = useState<{
-    index_no: string;
-    message: string;
-  } | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
-  const [lastRawScan, setLastRawScan] = useState<string | null>(null); // dev builds only
-
-  // Called for every frame a barcode is read in
-  const handleLiveDecode = (decodedText: string) => {
+  const onDecode = (text: string) => {
     if (busyRef.current) return;
-
-    if (IS_DEV_BUILD) setLastRawScan(decodedText);
-
-    const index_no = parseIndex(decodedText);
-    if (!index_no) {
-      lastReadRef.current = { index: '', count: 0 };
-      setValidationError(
-        'Incorrect barcode. Please scan the front side of your University ID card.'
-      );
+    if (IS_DEV_BUILD) setRawScan(text);
+    const index = parseIndex(text);
+    if (!index) {
+      lastRead.current = { index: '', count: 0 };
+      if (++badReads.current >= 3) setHint('That barcode isn’t a student ID. Scan the barcode on your university ID card.');
       return;
     }
-
-    // Accept only after the same index is read CONFIRM_READS times in a row
-    if (lastReadRef.current.index === index_no) {
-      lastReadRef.current.count += 1;
-    } else {
-      lastReadRef.current = { index: index_no, count: 1 };
-    }
-
-    if (lastReadRef.current.count >= CONFIRM_READS) {
-      acceptIndex(index_no);
-    }
+    lastRead.current = lastRead.current.index === index ? { index, count: lastRead.current.count + 1 } : { index, count: 1 };
+    if (lastRead.current.count >= CONFIRM_READS) void accept(index);
   };
 
-  const scanner = useBarcodeScanner(handleLiveDecode);
-  const { start: startCamera, stop: stopScanner, isScanning, hasTorch, torchOn: isTorchOn, toggleTorch } = scanner;
-  const cameraError = scanner.error ? CAMERA_ERRORS[scanner.error] : null;
+  const scanner = useBarcodeScanner(onDecode);
 
-  // Start (or restart) the live camera scanner
-  const startScanner = () => {
+  const start = () => {
     busyRef.current = false;
-    lastReadRef.current = { index: '', count: 0 };
-    setValidationError(null);
-    setExistingUserError(null);
-    startCamera();
+    lastRead.current = { index: '', count: 0 };
+    badReads.current = 0;
+    setRead(null);
+    setHint(null);
+    void scanner.start();
   };
 
-  // An index number was read from the ID: check it and continue to step 2
-  const acceptIndex = async (index_no: string) => {
+  // A barcode was read: stop the camera, show it, and check whether it already has an account
+  const accept = async (index: string) => {
     if (busyRef.current) return;
     busyRef.current = true;
-    setValidationError(null);
-    setExistingUserError(null);
-
-    stopScanner();
-
-    // Haptic feedback
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(150);
-    }
-
-    setIsChecking(true);
-
+    scanner.stop();
     try {
-      // Check if an account already exists for this index
-      const res = await fetch('/api/auth/check-index', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index_no }),
-      });
-
-      const json = await res.json();
-
-      if (json.exists) {
-        setExistingUserError({
-          index_no,
-          message:
-            json.message ||
-            `An account already exists for Index Number ${index_no}. Please sign in to your account.`,
-        });
-        setIsChecking(false);
-        busyRef.current = false;
-        return;
-      }
-
-      // Valid and new: save the index for step 2 (the server checks again at signup)
-      sessionStorage.setItem('astrix_verified_index', index_no);
-      router.push('/signup/details');
-    } catch (err: any) {
-      console.error('Verification check error:', err);
-      // The signup API refuses existing accounts anyway, so continue
-      sessionStorage.setItem('astrix_verified_index', index_no);
-      router.push('/signup/details');
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
-  // Photo upload fallback
-  const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+      navigator.vibrate?.(30);
+    } catch {}
+    setChecking(true);
+    setRead({ index, exists: false });
     try {
-      setIsChecking(true);
-      setValidationError(null);
-      setExistingUserError(null);
-
-      const decodedText = await scanner.decodeFile(file);
-      const index_no = decodedText ? parseIndex(decodedText) : null;
-      if (!index_no) {
-        setValidationError(
-          'Could not read the barcode in that photo. Take it straight on, close up, with the whole barcode in the picture.'
-        );
-        return;
-      }
-      setIsChecking(false);
-      await acceptIndex(index_no);
+      const res = await fetch('/api/auth/check-index', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index_no: index }) });
+      const json = await res.json().catch(() => ({}));
+      setRead({ index, exists: Boolean(json.exists) });
     } catch {
-      setValidationError(
-        'Could not read the barcode in that photo. Take it straight on, close up, with the whole barcode in the picture.'
-      );
+      setRead({ index, exists: false }); // signup checks again on the next step
     } finally {
-      setIsChecking(false);
-      e.target.value = '';
+      setChecking(false);
     }
   };
 
-  // Mount/unmount: start the camera once, release it cleanly when leaving
-  useEffect(() => {
-    startScanner();
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setHint(null);
+    setChecking(true);
+    try {
+      const text = await scanner.decodeFile(file);
+      const index = text ? parseIndex(text) : null;
+      if (index) {
+        setChecking(false);
+        await accept(index);
+        return;
+      }
+      setHint('We couldn’t read the barcode in that photo. Take it straight on and close up, with the whole barcode in the picture.');
+    } catch {
+      setHint('We couldn’t open that photo. Try another one.');
+    }
+    setChecking(false);
+  };
 
-    // Release camera when tab is switched or phone goes to sleep; restart when returning
-    const handleVisibility = () => {
+  const proceed = () => {
+    if (!read) return;
+    clearSignup();
+    writeSignup({ index_no: read.index });
+    router.push('/signup/details');
+  };
+
+  // Start the camera on arrival; release it in the background, resume when back
+  useEffect(() => {
+    start();
+    const onVisibility = () => {
       if (document.hidden) {
-        pausedForBackgroundRef.current = true;
-        stopScanner();
-      } else if (pausedForBackgroundRef.current && !busyRef.current) {
-        pausedForBackgroundRef.current = false;
-        startScanner();
+        pausedRef.current = true;
+        scanner.stop();
+      } else if (pausedRef.current && !busyRef.current) {
+        pausedRef.current = false;
+        void scanner.start();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Developer Testing Shortcuts (local builds only)
-  const handleSimulateInvalid = () => {
-    setValidationError(
-      'Incorrect barcode. Please scan the front side of your University ID card.'
-    );
-  };
-
-  const handleSimulateExisting = () => {
-    setExistingUserError({
-      index_no: 'DEV001',
-      message: 'Account already exists for Index Number DEV001. Please sign in to your existing account.',
-    });
-  };
+  const cameraError = scanner.error ? CAMERA_ERRORS[scanner.error] : null;
 
   return (
-    <div className="astrix-theme-page select-none overflow-y-auto">
-      <StormHeader rain className="astrix-theme-header astrix-scanner-header">
-        <div className="astrix-header-top">
-          <Link href="/login" className="astrix-header-back" aria-label="Back to sign in">
-            <ArrowLeft size={21} />
-          </Link>
-          <span className="astrix-step-count">Step 1 of 3</span>
-        </div>
-        <h1 className="astrix-theme-title">Scan your student ID</h1>
-        <p className="astrix-scanner-subtitle">Scan the barcode on your university ID to get started.</p>
-      </StormHeader>
+    <div className="flex min-h-[100dvh] flex-col">
+      <TopBar title="Create account" back={{ href: '/login', label: 'Back to sign in' }} />
+      <main className="flex flex-1 flex-col gap-5 px-6 pb-[calc(var(--safe-bottom)+24px)] pt-5">
+        <StepBar step={1} of={4} />
+        <StepHeading step={1} of={4} title="Scan your student ID">
+          Place the barcode on your student ID inside the frame. It&apos;s read on your phone; nothing is uploaded.
+        </StepHeading>
 
-      <main className="astrix-theme-sheet astrix-scanner-sheet">
-        <SignupProgress step={1} />
+        {/* Camera */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-navy shadow-1">
+          <video ref={scanner.videoRef} className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${read ? 'opacity-30' : ''}`} playsInline muted aria-label="Camera view for scanning your student ID" />
 
-        {IS_DEV_BUILD && (
-            <div className="flex items-center justify-center gap-1 mb-4">
-              <button
-                type="button"
-                onClick={() => acceptIndex('250373T')}
-                className="text-[10px] text-emerald-700 font-bold bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 transition"
-                title="Simulate valid UoM ID barcode"
-              >
-                Scan 250373T
-              </button>
-              <button
-                type="button"
-                onClick={handleSimulateInvalid}
-                className="text-[10px] text-amber-700 font-bold bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 transition"
-                title="Test wrong barcode"
-              >
-                Wrong
-              </button>
-              <button
-                type="button"
-                onClick={handleSimulateExisting}
-                className="text-[10px] text-rose-700 font-bold bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg border border-rose-200 transition"
-                title="Test duplicate account"
-              >
-                Exists
-              </button>
-            </div>
-        )}
-        <div className="space-y-4">
-        {/* Error: Non-UoM Barcode Error */}
-        {validationError && (
-          <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 text-xs space-y-2 animate-in fade-in slide-in-from-top-1 shadow-sm">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-amber-950 text-xs">Incorrect Barcode</p>
-                <p className="leading-relaxed text-amber-800">{validationError}</p>
+          {!read && scanner.isScanning && (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-5">
+              {/* Wide frame for a linear barcode */}
+              <div className="relative h-[34%] w-[88%] rounded-[14px] shadow-[0_0_0_9999px_rgb(10_25_50/0.45)]">
+                <span className="absolute -left-0.5 -top-0.5 h-6 w-6 rounded-tl-[14px] border-l-[3px] border-t-[3px] border-white" />
+                <span className="absolute -right-0.5 -top-0.5 h-6 w-6 rounded-tr-[14px] border-r-[3px] border-t-[3px] border-white" />
+                <span className="absolute -bottom-0.5 -left-0.5 h-6 w-6 rounded-bl-[14px] border-b-[3px] border-l-[3px] border-white" />
+                <span className="absolute -bottom-0.5 -right-0.5 h-6 w-6 rounded-br-[14px] border-b-[3px] border-r-[3px] border-white" />
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error: User Already Exists in Database */}
-        {existingUserError && (
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-3 animate-in fade-in slide-in-from-top-1 shadow-sm">
-            <div className="flex items-start space-x-2">
-              <UserCheck className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-rose-950 text-xs">Account Already Exists</p>
-                <p className="leading-relaxed text-rose-800">{existingUserError.message}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 pt-1">
-              <Link
-                href={`/login?index_no=${encodeURIComponent(existingUserError.index_no)}`}
-                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition text-center shadow-sm"
-              >
-                <span>Sign In to Account</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-              <button
-                type="button"
-                onClick={startScanner}
-                className="py-2 px-3 bg-white border border-rose-200 hover:bg-rose-100 text-rose-800 rounded-xl font-bold text-xs transition"
-              >
-                Scan Again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Camera Permission Error */}
-        {cameraError && (
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-3 animate-in fade-in shadow-sm">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <p className="leading-relaxed text-rose-800">{cameraError}</p>
-            </div>
-            <button
-              type="button"
-              onClick={startScanner}
-              className="w-full py-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs flex items-center justify-center space-x-2"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry Camera Permission</span>
-            </button>
-          </div>
-        )}
-
-        {/* Camera Viewport Container */}
-        <div className="astrix-scanner-viewport relative w-full aspect-[4/3] rounded-3xl overflow-hidden flex items-center justify-center">
-          {/* Live camera picture; the frame drawn on top is the area that is read */}
-          <video
-            ref={scanner.videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            playsInline
-            muted
-            aria-label="Camera view for scanning your student ID"
-          />
-
-          {/* Aiming guide */}
-          {isScanning && !existingUserError && (
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
-              <div className="w-[84%] max-w-[320px] aspect-[16/10] rounded-2xl border-2 border-sky-400/80 relative shadow-[0_0_20px_rgba(56,189,248,0.3)]">
-                {/* Corner Marks */}
-                <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-sky-400" />
-                <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-sky-400" />
-                <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-sky-400" />
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-sky-400" />
-
-                <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-sky-200 to-transparent shadow-[0_0_8px_#dbeafe] animate-pulse top-1/2" />
-              </div>
-
-              <p className="text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-xs px-3 py-1 rounded-full mt-3 border border-white/10">
-                Hold the barcode flat, about a hand&apos;s length away
-              </p>
+              <p className="glass-dark rounded-full px-3.5 py-1.5 text-[0.875rem] font-medium text-white">Hold steady, about a hand&apos;s length away</p>
             </div>
           )}
 
-          {/* Checking Overlay */}
-          {isChecking && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center space-y-3 z-20">
-              <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin" />
-              <p className="text-white font-bold text-xs tracking-wide">
-                Verifying Student ID...
-              </p>
+          {!read && !scanner.isScanning && !cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/90">
+              <Spinner className="h-7 w-7" />
+              <p className="text-[0.9375rem]">Starting the camera…</p>
             </div>
           )}
 
-          {/* Torch Button */}
-          {hasTorch && isScanning && (
-            <button
-              type="button"
-              onClick={toggleTorch}
-              className={`absolute top-3 right-3 p-2.5 rounded-full backdrop-blur-md transition shadow-md z-10 ${
-                isTorchOn ? 'bg-amber-400 text-slate-950' : 'bg-black/40 text-white hover:bg-black/60'
-              }`}
-              title="Toggle Flashlight"
-            >
-              <Flashlight className="w-4 h-4" />
+          {cameraError && !read && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-white">
+              <Camera className="h-8 w-8 opacity-80" strokeWidth={1.75} aria-hidden="true" />
+              <p className="font-semibold">{cameraError.title}</p>
+              <p className="text-[0.9375rem] text-white/80">{cameraError.body}</p>
+            </div>
+          )}
+
+          {read && (
+            <div className="enter absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-white" role="status">
+              {checking ? <Spinner className="h-8 w-8" /> : <CheckCircle2 className="h-10 w-10 text-[#7FE0A8]" strokeWidth={2} aria-hidden="true" />}
+              <p className="text-[0.9375rem] font-medium text-white/85">Barcode read</p>
+              <p className="num text-[2rem] font-bold tracking-[0.04em]">{read.index}</p>
+            </div>
+          )}
+
+          {scanner.hasTorch && scanner.isScanning && !read && (
+            <button type="button" onClick={scanner.toggleTorch} aria-pressed={scanner.torchOn} aria-label={scanner.torchOn ? 'Turn off the torch' : 'Turn on the torch'}
+              className={`absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full ${scanner.torchOn ? 'bg-white text-navy' : 'glass-dark text-white'}`}>
+              <Flashlight className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
             </button>
           )}
         </div>
 
-        {/* Raw scan readout (local development builds only) */}
-        {IS_DEV_BUILD && lastRawScan && (
-          <p className="text-[10px] font-mono text-slate-500 px-1">Last raw scan: {lastRawScan}</p>
+        {IS_DEV_BUILD && rawScan && <p className="num text-xs text-ink-3">Last raw scan: {rawScan}</p>}
+        {hint && !read && <Notice tone="caution" title={hint} />}
+        {read?.exists && (
+          <Notice tone="info" title={`There’s already an account for ${read.index}`} action={<Link href={`/login?index_no=${encodeURIComponent(read.index)}`} className="btn btn-primary">Sign in instead</Link>}>
+            Forgot the password? You can reset it from the sign-in screen.
+          </Notice>
         )}
 
-        {/* Hidden File Input for fallback photo scan */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileScan}
-          accept="image/*"
-          className="hidden"
-        />
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
 
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="astrix-scanner-upload">
-          <Upload size={20} aria-hidden="true" /> Upload barcode photo
-        </button>
-        <p className="astrix-scanner-privacy"><ShieldCheck size={15} aria-hidden="true" /> Scanned on your phone. Nothing is uploaded.</p>
+        <div className="mt-auto flex flex-col gap-2">
+          {read && !read.exists && !checking ? (
+            <>
+              <button type="button" className="btn btn-primary btn-lg w-full" onClick={proceed}>Continue</button>
+              <button type="button" className="btn btn-plain w-full" onClick={start}><RotateCcw className="h-[18px] w-[18px]" aria-hidden="true" /> Scan again</button>
+            </>
+          ) : read ? (
+            <button type="button" className="btn btn-secondary btn-lg w-full" onClick={start} disabled={checking}><RotateCcw className="h-5 w-5" aria-hidden="true" /> Scan a different ID</button>
+          ) : (
+            <>
+              {cameraError && <button type="button" className="btn btn-primary btn-lg w-full" onClick={start}><Camera className="h-5 w-5" aria-hidden="true" /> Try the camera again</button>}
+              <button type="button" className={`btn ${cameraError ? 'btn-secondary btn-lg' : 'btn-plain'} w-full`} onClick={() => fileRef.current?.click()} disabled={checking}>
+                {checking ? <Spinner className="h-5 w-5" /> : <ImageUp className="h-5 w-5" strokeWidth={2} aria-hidden="true" />} Upload a photo of the barcode
+              </button>
+            </>
+          )}
+          {IS_DEV_BUILD && !read && (
+            <button type="button" className="btn btn-plain w-full text-xs text-ink-3" onClick={() => void accept('250373T')}>Scan 250373T</button>
+          )}
+          <p className="pt-2 text-center text-[0.9375rem] text-ink-2">
+            Already registered? <Link href="/login" className="font-semibold text-blue">Sign in</Link>
+          </p>
         </div>
-
-        <p className="astrix-scanner-footer">Already registered? <Link href="/login">Sign in</Link></p>
       </main>
     </div>
   );

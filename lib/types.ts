@@ -54,6 +54,9 @@ export interface MeResponse {
   is_admin: boolean;
   cabinet_online: boolean | null; // null = not known yet
   slots: PublicSlot[];
+  // A borrow/return of this student's that is still settling (e.g. the cabinet's
+  // answer was lost and the slot sync hasn't resolved it yet)
+  pending: { action: 'BORROW' | 'RETURN'; slot: number } | null;
   active_loan: {
     record_id: string;
     umbrella_id: string;

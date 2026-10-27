@@ -106,7 +106,7 @@ function answers(data: { action?: unknown; slot?: unknown; op?: unknown }, comma
  *   4. wait for the cabinet's response for this command
  * With older firmware (no status message) steps 2-3 are skipped, as before.
  */
-function attemptCabinetCommand(command: CabinetCommand, timeoutMs: number): Promise<CabinetResult> {
+function attemptCabinetCommand(command: CabinetCommand, timeoutMs: number, onAck?: () => void): Promise<CabinetResult> {
   return new Promise((resolve) => {
     const client = mqtt.connect(getEffectiveBrokerUrl(), getBrokerOptions('astrix-web'));
     let commandSent = false;
@@ -152,6 +152,8 @@ function attemptCabinetCommand(command: CabinetCommand, timeoutMs: number): Prom
           return;
         }
         commandSent = true;
+        // Firmware without "got it" replies: the best signal we have is that the command went out
+        if (!status?.ack) onAck?.();
         if (status?.ack) {
           ackTimer = setTimeout(() => {
             console.warn('⚠️ [Cabinet] No "got it" reply: the cabinet may or may not be acting on', JSON.stringify(command));
@@ -203,8 +205,12 @@ function attemptCabinetCommand(command: CabinetCommand, timeoutMs: number): Prom
         if (topic === MQTT_TOPIC_ACK) {
           if (ackTimer) clearTimeout(ackTimer);
           ackTimer = null;
-          if (data.accepted === false) finish({ ok: false, error: 'BUSY', commandSent: true });
-          else acked = true;
+          if (data.accepted === false) {
+            finish({ ok: false, error: 'BUSY', commandSent: true });
+          } else if (!acked) {
+            acked = true;
+            onAck?.();
+          }
           return;
         }
 
@@ -234,17 +240,18 @@ export async function runCabinetCommand(
   action: CabinetAction,
   slot: number,
   timeoutMs = 45000,
-  op?: string
+  op?: string,
+  onAck?: () => void // called once, when the cabinet confirms it got the command
 ): Promise<CabinetResult> {
   const command: CabinetCommand = { action, slot, op: op ?? crypto.randomUUID().slice(0, 8) };
 
-  const first = await attemptCabinetCommand(command, timeoutMs);
+  const first = await attemptCabinetCommand(command, timeoutMs, onAck);
   if (first.ok || first.commandSent) return first;
   if (first.error === 'OFFLINE') return first;
 
   console.warn('⚠️ [HiveMQ] Command was not delivered. Retrying once...');
   await new Promise((r) => setTimeout(r, 400));
-  return attemptCabinetCommand(command, timeoutMs);
+  return attemptCabinetCommand(command, timeoutMs, onAck);
 }
 
 /**
