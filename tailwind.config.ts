@@ -21,6 +21,21 @@ const config: Config = {
           800: '#075985',
           900: '#0c4a6e',
         },
+        // Redesign palette: rich blue on white
+        brand: {
+          50: '#f1f5fd',
+          100: '#e2eafa',
+          200: '#c3d3f4',
+          300: '#94b0ea',
+          500: '#2f5fd0',
+          600: '#1f4fc2',
+          700: '#183f9e',
+          900: '#0f1e3d',
+        },
+      },
+      fontFamily: {
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        body: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
     },
   },

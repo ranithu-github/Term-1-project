@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, Eye, EyeOff, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
+import { AuthHeader, authInputClass } from '@/components/AuthMarks';
 
 export default function SignUpPasswordPage() {
   const router = useRouter();
@@ -45,12 +45,12 @@ export default function SignUpPasswordPage() {
 
     const cleanPass = password.trim();
     if (!cleanPass || cleanPass.length < 6) {
-      setError('Password must be at least 6 characters long.');
+      setError('Use at least 6 characters.');
       return;
     }
 
     if (cleanPass !== confirmPassword.trim()) {
-      setError('Passwords do not match. Please verify.');
+      setError("Passwords don't match.");
       return;
     }
 
@@ -101,68 +101,40 @@ export default function SignUpPasswordPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-6 bg-white select-none overflow-y-auto">
-      {/* Header */}
-      <div className="pt-2 space-y-3">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => router.push('/signup/details')}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 hover:text-sky-600 transition py-1 px-2 rounded-lg hover:bg-slate-100"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back</span>
-          </button>
+    <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
+      <AuthHeader
+        step={3}
+        lines={['Set a', 'password.']}
+        note={[username, indexNo].filter(Boolean).join(' · ')}
+        onBack={() => router.push('/signup/details')}
+      />
 
-          <span className="text-xs font-semibold text-slate-500">
-            Step 3 of 3
-          </span>
-        </div>
-
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Set Password</h1>
-          <p className="text-xs text-slate-500">
-            Create a secure password to access your Astrix account.
-          </p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <form onSubmit={handleCreateAccount} className="my-auto py-4 space-y-4">
-        {/* Verified Student Badge */}
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs flex items-center justify-between shadow-xs">
-          <div className="space-y-0.5">
-            <p className="font-bold text-emerald-950">{username || 'Student'}</p>
-            <p className="text-[11px] font-mono text-emerald-800 font-semibold">{indexNo} • {email}</p>
-          </div>
-          <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            <span>Verified OTP</span>
-          </span>
-        </div>
-
+      {/* White sheet */}
+      <form
+        onSubmit={handleCreateAccount}
+        className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-9 pb-8 space-y-5"
+      >
         {error && (
-          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2 animate-in fade-in">
+          <p className="px-4 py-3 rounded-xl bg-rose-50 text-rose-800 text-sm flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-            <span className="leading-relaxed">{error}</span>
-          </div>
+            <span>{error}</span>
+          </p>
         )}
 
-        {/* 1. New Password */}
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+        {/* New Password */}
+        <div className="space-y-2">
+          <label htmlFor="new-password" className="block text-sm font-semibold text-brand-900">
             Password
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Lock className="w-4 h-4" />
-            </div>
             <input
+              id="new-password"
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 6 characters"
-              className="w-full pl-10 pr-10 py-3 rounded-xl bg-white border-2 border-slate-200 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-500/15 focus:border-sky-600 transition shadow-xs"
+              className={`${authInputClass} pr-12`}
+              autoComplete="new-password"
               required
               minLength={6}
               autoFocus
@@ -170,69 +142,57 @@ export default function SignUpPasswordPage() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-brand-300 hover:text-brand-600"
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
             </button>
           </div>
         </div>
 
-        {/* 2. Confirm Password */}
-        <div className="space-y-1 pt-1">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            Confirm Password
+        {/* Confirm Password */}
+        <div className="space-y-2">
+          <label htmlFor="confirm-password" className="block text-sm font-semibold text-brand-900">
+            Confirm password
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Lock className="w-4 h-4" />
-            </div>
             <input
+              id="confirm-password"
               type={showConfirm ? 'text' : 'password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter your password"
-              className="w-full pl-10 pr-10 py-3 rounded-xl bg-white border-2 border-slate-200 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-500/15 focus:border-sky-600 transition shadow-xs"
+              placeholder="Type it again"
+              className={`${authInputClass} pr-12`}
+              autoComplete="new-password"
               required
               minLength={6}
             />
             <button
               type="button"
               onClick={() => setShowConfirm(!showConfirm)}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+              aria-label={showConfirm ? 'Hide password' : 'Show password'}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-brand-300 hover:text-brand-600"
             >
-              {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showConfirm ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
             </button>
           </div>
         </div>
 
-        {/* Submit Button */}
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={loading || password.length < 6 || password !== confirmPassword}
-            className="w-full py-3.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs uppercase tracking-wider shadow-md shadow-sky-600/30 flex items-center justify-center space-x-2 transition disabled:opacity-50 active:scale-[0.99] cursor-pointer"
-          >
-            {loading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <span>Complete Registration & Sign In</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-
-      {/* Footer */}
-      <div className="pt-3 border-t border-slate-100 text-center">
-        <Link
-          href="/login"
-          className="text-xs font-semibold text-slate-500 hover:text-sky-600 transition"
+        <button
+          type="submit"
+          disabled={loading || password.length < 6 || password !== confirmPassword}
+          className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-50 active:scale-[0.99]"
         >
-          Already registered? Sign In
-        </Link>
-      </div>
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <>
+              <span>Create account</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </form>
     </div>
   );
 }

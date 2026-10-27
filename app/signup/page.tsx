@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import {
   Barcode,
   AlertTriangle,
-  ShieldCheck,
   RefreshCw,
   Flashlight,
   Upload,
   ArrowRight,
   UserCheck,
 } from 'lucide-react';
+import { AuthHeader } from '@/components/AuthMarks';
 
 // The UoM student ID barcode contains only the index number: 6 digits + a letter
 const INDEX_PATTERN = /^[0-9]{6}[A-Z]$/;
@@ -318,109 +318,42 @@ export default function BarcodeScanPage() {
     };
   }, [startScanner, stopScanner]);
 
-  // Developer Testing Shortcuts (local builds only)
-  const handleSimulateInvalid = () => {
-    setValidationError(
-      'Incorrect barcode. Please scan the front side of your University ID card.'
-    );
-  };
-
-  const handleSimulateExisting = () => {
-    setExistingUserError({
-      index_no: 'DEV001',
-      message: 'Account already exists for Index Number DEV001. Please sign in to your existing account.',
-    });
-  };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-6 bg-white select-none overflow-y-auto">
-      {/* Top Header */}
-      <div className="pt-2 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500">
-            Step 1 of 3
-          </span>
+    <div className="flex-1 flex flex-col bg-brand-600 font-body select-none">
+      <AuthHeader step={1} lines={['Scan your', 'student ID.']} />
 
-          {IS_DEV_BUILD && (
-            <div className="flex items-center space-x-1">
-              <button
-                type="button"
-                onClick={() => acceptIndex('250373T')}
-                className="text-[10px] text-emerald-700 font-bold bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 transition"
-                title="Simulate valid UoM ID barcode"
-              >
-                Scan 250373T
-              </button>
-              <button
-                type="button"
-                onClick={handleSimulateInvalid}
-                className="text-[10px] text-amber-700 font-bold bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 transition"
-                title="Test wrong barcode"
-              >
-                Wrong
-              </button>
-              <button
-                type="button"
-                onClick={handleSimulateExisting}
-                className="text-[10px] text-rose-700 font-bold bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg border border-rose-200 transition"
-                title="Test duplicate account"
-              >
-                Exists
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
-            <span>Scan Student ID</span>
-            <Barcode className="w-6 h-6 text-sky-600" />
-          </h1>
-          <p className="text-xs text-slate-500">
-            Please scan the front side of your University ID card.
-          </p>
-        </div>
-      </div>
-
-      {/* Main Barcode Scanner Body */}
-      <div className="my-auto py-4 space-y-4">
+      {/* White sheet */}
+      <div className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-9 pb-8 space-y-4">
         {/* Error: Non-UoM Barcode Error */}
         {validationError && (
-          <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 text-xs space-y-2 animate-in fade-in slide-in-from-top-1 shadow-sm">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-amber-950 text-xs">Incorrect Barcode</p>
-                <p className="leading-relaxed text-amber-800">{validationError}</p>
-              </div>
-            </div>
-          </div>
+          <p className="px-4 py-3 rounded-xl bg-amber-50 text-amber-900 text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Wrong barcode. Use the front of your ID.</span>
+          </p>
         )}
 
         {/* Error: User Already Exists in Database */}
         {existingUserError && (
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-3 animate-in fade-in slide-in-from-top-1 shadow-sm">
-            <div className="flex items-start space-x-2">
-              <UserCheck className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-rose-950 text-xs">Account Already Exists</p>
-                <p className="leading-relaxed text-rose-800">{existingUserError.message}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 pt-1">
+          <div className="p-4 rounded-xl bg-rose-50 text-rose-900 text-sm space-y-3">
+            <p className="flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>This ID already has an account.</span>
+            </p>
+            <div className="flex items-center gap-2">
               <Link
                 href={`/login?index_no=${encodeURIComponent(existingUserError.index_no)}`}
-                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition text-center shadow-sm"
+                className="flex-1 py-2.5 px-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition"
               >
-                <span>Sign In to Account</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span>Sign in</span>
+                <ArrowRight className="w-4 h-4" />
               </Link>
               <button
                 type="button"
                 onClick={startScanner}
-                className="py-2 px-3 bg-white border border-rose-200 hover:bg-rose-100 text-rose-800 rounded-xl font-bold text-xs transition"
+                className="py-2.5 px-3 text-brand-900 hover:bg-white rounded-xl font-semibold text-sm transition"
               >
-                Scan Again
+                Scan again
               </button>
             </div>
           </div>
@@ -428,24 +361,25 @@ export default function BarcodeScanPage() {
 
         {/* Camera Permission Error */}
         {cameraError && (
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-3 animate-in fade-in shadow-sm">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <p className="leading-relaxed text-rose-800">{cameraError}</p>
-            </div>
+          <div className="px-4 py-3 rounded-xl bg-rose-50 text-rose-900 text-sm flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Camera unavailable.</span>
+            </span>
             <button
               type="button"
               onClick={startScanner}
-              className="w-full py-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs flex items-center justify-center space-x-2"
+              title={cameraError}
+              className="font-semibold text-rose-700 hover:text-rose-800 flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry Camera Permission</span>
+              <span>Retry</span>
             </button>
           </div>
         )}
 
         {/* Camera Viewport Container */}
-        <div className="relative w-full aspect-[4/3] rounded-3xl bg-slate-900 overflow-hidden shadow-lg border-2 border-slate-200/80 flex items-center justify-center">
+        <div className="relative w-full aspect-[4/3] rounded-2xl bg-brand-900 overflow-hidden flex items-center justify-center">
           <style jsx global>{`
             #astrix-barcode-reader {
               width: 100% !important;
@@ -461,7 +395,7 @@ export default function BarcodeScanPage() {
               width: 100% !important;
               height: 100% !important;
               object-fit: cover !important;
-              border-radius: 1.5rem !important;
+              border-radius: 1rem !important;
             }
             #astrix-barcode-reader__scan_region {
               width: 100% !important;
@@ -479,33 +413,29 @@ export default function BarcodeScanPage() {
           <div id="astrix-barcode-reader" className="w-full h-full object-cover" />
           <div id="astrix-file-scanner" className="hidden" />
 
+          {/* Idle state before the camera starts */}
+          {!isScanning && !isChecking && (
+            <Barcode className="relative w-10 h-10 text-white/25" aria-hidden="true" />
+          )}
+
           {/* Aiming guide */}
           {isScanning && !existingUserError && (
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
-              <div className="w-[84%] max-w-[320px] aspect-[16/10] rounded-2xl border-2 border-sky-400/80 relative shadow-[0_0_20px_rgba(56,189,248,0.3)]">
-                {/* Corner Marks */}
-                <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-sky-400" />
-                <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-sky-400" />
-                <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-sky-400" />
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-sky-400" />
-
-                {/* Animated Red Laser Scan Line */}
-                <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_8px_#ef4444] animate-pulse top-1/2" />
+              <div className="w-[84%] max-w-[320px] aspect-[16/10] relative">
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] border-white rounded-tl-lg" />
+                <div className="absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] border-white rounded-tr-lg" />
+                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] border-white rounded-bl-lg" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] border-white rounded-br-lg" />
+                <div className="absolute inset-x-6 top-1/2 h-px bg-white/70" />
               </div>
-
-              <p className="text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-xs px-3 py-1 rounded-full mt-3 border border-white/10">
-                Hold the barcode flat, about a hand&apos;s length away
-              </p>
             </div>
           )}
 
           {/* Checking Overlay */}
           {isChecking && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center space-y-3 z-20">
-              <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin" />
-              <p className="text-white font-bold text-xs tracking-wide">
-                Verifying Student ID...
-              </p>
+            <div className="absolute inset-0 bg-brand-900/85 flex flex-col items-center justify-center gap-3 z-20">
+              <div className="w-8 h-8 border-[3px] border-white/30 border-t-white rounded-full animate-spin" />
+              <p className="text-white font-medium text-sm">Checking your ID...</p>
             </div>
           )}
 
@@ -514,8 +444,8 @@ export default function BarcodeScanPage() {
             <button
               type="button"
               onClick={toggleTorch}
-              className={`absolute top-3 right-3 p-2.5 rounded-full backdrop-blur-md transition shadow-md z-10 ${
-                isTorchOn ? 'bg-amber-400 text-slate-950' : 'bg-black/40 text-white hover:bg-black/60'
+              className={`absolute top-3 right-3 p-2.5 rounded-full transition z-10 ${
+                isTorchOn ? 'bg-white text-brand-900' : 'bg-white/15 text-white hover:bg-white/25'
               }`}
               title="Toggle Flashlight"
             >
@@ -538,30 +468,19 @@ export default function BarcodeScanPage() {
           className="hidden"
         />
 
-        {/* Instructions & Fallbacks */}
-        <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-          <div className="flex items-center space-x-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="font-medium text-[11px]">Scanned on your phone. Nothing is uploaded.</span>
-          </div>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full py-3.5 px-4 rounded-xl border border-brand-100 hover:bg-brand-50 text-brand-700 font-semibold text-sm flex items-center justify-center gap-2 transition"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Upload a photo</span>
+        </button>
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-[11px] font-bold text-sky-600 hover:text-sky-700 underline inline-flex items-center space-x-1"
-          >
-            <Upload className="w-3 h-3" />
-            <span>Upload Photo Instead</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="pt-3 border-t border-slate-100 text-center">
-        <p className="text-xs text-slate-500">
+        <p className="pt-4 text-center text-sm text-slate-500">
           Already have an account?{' '}
-          <Link href="/login" className="text-sky-600 font-bold hover:underline">
-            Sign In
+          <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-700">
+            Sign in
           </Link>
         </p>
       </div>
