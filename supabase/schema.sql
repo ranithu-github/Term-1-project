@@ -1,8 +1,9 @@
 -- ================================================================
 -- PROJECT ASTRIX - SUPABASE DATABASE SCHEMA
 -- Matches the tables and columns the app actually uses.
--- Run in the Supabase SQL Editor to create a fresh database.
--- For the existing live database, run migrations/20261025_lockdown.sql instead.
+-- Run in the Supabase SQL Editor to create a fresh database, THEN run
+-- migrations/20261028_lifecycle.sql (the borrow/return functions).
+-- For the existing live database, see docs/OPERATIONS.md.
 -- ================================================================
 
 -- 1. USERS (one row per verified student)

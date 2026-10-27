@@ -5,9 +5,9 @@ The admin panel is at **`/admin`**. Only admin accounts can open it. Admins are 
 Alerts appear **while an admin has the panel open**. The panel refreshes every 5 s, and each refresh also runs the server checks. New alerts play a short sound and, if allowed (bell button), show a browser notification.
 
 ## One-time setup
-The admin account (`admin-astrix`) can't be made through signup. Run `node scripts/create-admin.mjs`, enter an email and password, and paste the SQL it prints into the Supabase SQL Editor. Running it again resets that account's password. Sign in with `admin-astrix` as the index number.
+The admin account (`admin-astrix`) can't be made through signup. Run `node scripts/create-account.mjs` (role `admin`), enter an email and password, and paste the SQL it prints into the Supabase SQL Editor. Running it again resets that account's password. Sign in with `admin-astrix` as the index number.
 
-Run [`supabase/migrations/20261026_admin_panel.sql`](../supabase/migrations/20261026_admin_panel.sql) once in the Supabase SQL Editor. It creates the `admin_events` table (activity log + alerts) and adds `users.is_locked`. Until it is run, the app works normally, but the panel shows no alerts or activity and accounts can't be locked.
+Run the migrations in `supabase/migrations/` in date order (see [OPERATIONS.md](OPERATIONS.md)). It creates the `admin_events` table (activity log + alerts) and adds `users.is_locked`. Until it is run, the app works normally, but the panel shows no alerts or activity and accounts can't be locked.
 
 ## What the panel shows and does
 
@@ -17,10 +17,10 @@ Run [`supabase/migrations/20261026_admin_panel.sql`](../supabase/migrations/2026
 | **Alerts** | Open alerts (optionally handled ones too) | Mark handled, mark all handled |
 | **Slots** | Each slot's state | Open lock, close lock, release a held slot, mark available, mark out |
 | **Loans** | Open / returned / all loans | Mark returned, extend +24 h, delete the record |
-| **Users** | Students with search, lock state, open loan | Lock/unlock, email a password reset code, delete (only without an open loan) |
+| **Users** | Students with search, lock state, open loan | Lock/unlock, email a password reset code, delete (only accounts with no loan history; lock the others) |
 | **Activity** | Every borrow, return, sign-in, signup, password reset, cabinet event and admin action, with who did it | — |
 
-Admin accounts can't be locked or deleted from the panel. Every admin action is recorded in the activity log as `admin:<index>`.
+Admin accounts can't be locked or deleted from the panel. Risky actions ask for confirmation in an in-page sheet. Every admin action is recorded in the activity log as `admin:<index>`.
 
 ## Alerts (unusual events)
 

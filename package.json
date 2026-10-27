@@ -9,7 +9,8 @@
     "simulator": "node firmware/mock_esp32.js",
     "start": "next start",
     "lint": "next lint",
-    "dev:cabinet": "node scripts/dev-cabinet.mjs"
+    "dev:cabinet": "node scripts/dev-cabinet.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

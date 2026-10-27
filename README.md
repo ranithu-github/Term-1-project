@@ -1,109 +1,82 @@
-# ☂️ Project ASTRIX: IoT Smart Umbrella Borrowing System
-**University of Moratuwa (UoM) — Term 1 Engineering Project**
-**Team Astrix**
+# ASTRIX: smart umbrella borrowing
 
----
+A campus umbrella-sharing service for University of Moratuwa students. Students register once by scanning their student ID barcode, then borrow and return umbrellas from a 4-slot cabinet with their phone. Team Astrix, Term 1 engineering project.
 
-## 📌 Summary
-ASTRIX is a campus umbrella-sharing cabinet. Students register by scanning their university ID barcode, verify their email with a 6-digit code, then borrow or return umbrellas from a 4-slot ESP32 cabinet with servo locks, push-button docking sensors and RFID-tagged umbrellas.
+## How it works
 
----
+| Part | Technology | Notes |
+| --- | --- | --- |
+| Web app and API | Next.js 15 (App Router), TypeScript, Tailwind, on Vercel | Phone-first. All database access is in API routes. |
+| Database | Supabase Postgres | Row level security on, no policies: only the server (service key) can read or write. Borrow/return state changes run in guarded SQL functions. |
+| Sessions | Signed httpOnly cookie (`lib/session.ts`) | Re-checked on every request; a password change or admin lock ends every session. |
+| Student ID scanner | Own Code 39 decoder (`lib/barcode/`) in a Web Worker, plus the browser's BarcodeDetector where available | The UoM card's barcode prints with heavy ink spread and no quiet zone; general decoders can't read it. |
+| Cabinet link | MQTT (HiveMQ) | Commands carry an operation id; the cabinet confirms ("got it"), then reports the result and what is in each slot. |
+| Cabinet | ESP32-S3: 4 servo locks, 4 dock buttons, 4 RC522 RFID readers, LED strips | `firmware/esp32_smart_umbrella.ino` |
+| Email | Gmail SMTP (`nodemailer`), or Resend | Codes, receipts, overdue reminders. Sent after the response, never while a student waits. |
 
-## 🏛️ Architecture
+### A borrow
 
-| Layer | Technology | Details |
-| :--- | :--- | :--- |
-| **Web app & API** | **Next.js 15 (App Router)** | TypeScript, Tailwind CSS, deployed on Vercel |
-| **Database** | **Supabase (PostgreSQL)** | Accessed only from API routes with the service-role key |
-| **Sessions** | **Signed httpOnly cookie** | `lib/session.ts`, signed with `AUTH_SECRET` |
-| **ID Scanner** | **`html5-qrcode`** | On-device barcode scanner with index-number validation |
-| **IoT broker** | **HiveMQ (MQTT)** | Public test broker by default; set a private broker for real use |
-| **Cabinet** | **ESP32-S3** | 4 servo locks, 4 push buttons, 4 RC522 RFID readers (`firmware/`) |
-| **Email** | **Gmail SMTP (`nodemailer`)**, Resend fallback | Verification codes, borrow and return receipts |
+1. The student taps **Borrow** (after confirming they're at the station, unless they arrived via the cabinet's QR sticker `/dashboard?at=station`).
+2. `POST /api/borrow` calls `begin_borrow()`, which claims the lowest free slot for this student in one transaction. A double tap, a second tab or a slow request can't claim a second slot.
+3. The response is a stream: `assigned` (which slot), `opened` (the cabinet confirmed it got the command: the take window starts), then `result`.
+4. The server publishes `{"action":"BORROW","slot":N,"op":"…"}` and waits for the cabinet's answer for that operation.
+5. **SUCCESS** → `complete_borrow()` records the loan and marks the slot out, atomically. **NOT_TAKEN / BUSY / offline** → `release_borrow()`. **No answer** → the slot stays held; the slot sync settles it from the cabinet's report (records the loan if the slot is empty, releases it if the umbrella is still there). The phone shows "We haven't heard back" until then.
 
-### How a borrow works
-1. The student taps **Borrow**. The browser calls `POST /api/borrow` (the session cookie identifies the student).
-2. The API claims a free slot in the database, sends `{"action":"BORROW","slot":N}` to `astrix-umbrella/cabinet/command`, and waits up to 45 s for the cabinet's reply on `astrix-umbrella/cabinet/response`.
-3. On `SUCCESS` the API records the loan and emails a receipt. On `FAIL` it frees the slot again.
+A **return** works the same way through `begin_return()` / `complete_return()` / `abort_return()`. The slot always comes from the student's loan; each umbrella has a home slot.
 
-Returns work the same way through `POST /api/return`. The return slot always comes from the student's loan (each umbrella has a home slot). The browser never writes to the database.
+### Keeping the database true to the cabinet
 
-The cabinet runs all 4 slots at the same time, so several students can borrow or return at once (about 7–13 s each). If the cabinet never answers a borrow, the slot stays held (`availability = true`, `borrowed_user` set) until someone checks the cabinet and clears it, so an umbrella can't leave without a loan.
+The cabinet publishes a retained slot report. `lib/cabinet-sync.ts` reads it at most every 15 s (across all server instances) and, through guarded SQL functions, closes loans whose umbrella is back, marks empty free slots as out, and settles operations whose answer was lost. Reports from a cabinet whose status says offline are ignored.
 
----
+## Running it locally
 
-## 🗄️ Database
-The real schema is in [`supabase/schema.sql`](supabase/schema.sql): `users`, `umbrellas` (slots 1–4) and `borrow_records`. Row level security is on with no policies, so only the server can read or write.
-
-For the existing live database, run [`supabase/migrations/20261025_lockdown.sql`](supabase/migrations/20261025_lockdown.sql) once, **after** deploying this version.
-
-| Slot | Umbrella tag UID |
-| :--- | :--- |
-| 1 | `53 01 B8 CC 33 00 01` |
-| 2 | `53 07 B8 CC 33 00 01` |
-| 3 | `53 08 B8 CC 33 00 01` |
-| 4 | `53 09 B8 CC 33 00 01` |
-
----
-
-## 📡 MQTT Contract
-
-* **Command** (server ➔ cabinet): `astrix-umbrella/cabinet/command`
-  * `{"action": "BORROW", "slot": 1}` or `{"action": "RETURN", "slot": 1}`
-* **Response** (cabinet ➔ server): `astrix-umbrella/cabinet/response`, QoS 0
-
-| Case | Response |
-| :--- | :--- |
-| Borrow success | `{"action":"BORROW","slot":X,"status":"SUCCESS","message":"Umbrella taken from Slot X. Closing the lock."}` |
-| Borrow fail | `{"action":"BORROW","slot":X,"status":"FAIL","reason":"NOT_TAKEN","message":"Umbrella was NOT taken from Slot X after 7 checks. The lock is closed."}` |
-| Return success | `{"action":"RETURN","slot":X,"status":"SUCCESS","message":"Umbrella X returned to Slot X. Closing the lock."}` |
-| Return fail | `{"action":"RETURN","slot":X,"status":"FAIL","reason":"NO_UMBRELLA","message":"No umbrella returned to Slot X after 7 checks. The lock is closed."}` |
-| Wrong umbrella | `{"action":"RETURN","slot":X,"status":"FAIL","reason":"WRONG_UMBRELLA","message":"Wrong umbrella in Slot X. Leaving the slot UNLOCKED - take it out and return Umbrella X."}` |
-
-* **Slot state** (cabinet ➔ server): `astrix-umbrella/cabinet/slots`, **retained**. Sent whenever what is in a slot changes, and at least once a minute:
-  `{"slots":[{"slot":1,"busy":false,"docked":true,"umbrella":1}, ...]}` (`umbrella` = number read on that slot's reader, `0` = unknown tag, `null` = no tag).
-  `lib/cabinet-sync.ts` reads it (after `/api/me`, at most every 15 s) and fixes the database: if a slot's own umbrella is back while the database says it is out, the open loan is closed (e.g. a return done at the cabinet with `r1`). If a free slot is empty at the cabinet, the slot is marked out. Busy slots and loans younger than 60 s are left alone. A slot held by a borrow (`availability = true` with `borrowed_user` set) is only touched once it has looked the same for more than 60 s, longer than any real borrow: if its umbrella is still docked the hold is released (e.g. Borrow pressed while the cabinet was offline), and if the slot is empty the loan is recorded for the student who held it (the cabinet opened it but its answer was lost).
-
-* **"Got it"** (cabinet ➔ server): `astrix-umbrella/cabinet/ack`, sent the moment a command arrives: `{"action":"BORROW","slot":1,"accepted":true}` (`accepted:false` with `"reason":"BUSY"` if that slot is busy).
-* **Online/offline** (cabinet ➔ server): `astrix-umbrella/cabinet/status`, **retained**. `{"online":true,"ack":true}` when the cabinet connects (refreshed every minute); `{"online":false}` is its MQTT last will, published by the broker about 20 s after the cabinet drops off.
-  The server won't send a command while the status says offline, and if no "got it" arrives within 6 s it treats the cabinet as offline and frees the slot instead of holding it. The dashboard shows "The umbrella cabinet is offline" and pauses Borrow/Return. With older firmware (no status message) the server behaves as before.
-
-> ⚠️ On the public broker anyone can publish to these topics. Before real use, move to a private broker (e.g. HiveMQ Cloud free tier) and allow only the cabinet to publish responses and only the server to publish commands. Set `HIVEMQ_*` in Vercel and `MQTT_USER`/`MQTT_PASS` in the firmware.
-
----
-
-## 🛡️ Admin panel
-`/admin`, for accounts in `ADMIN_INDEXES` (default `ADMIN-ASTRIX`). Live overview, alerts, slots, loans, users and an activity log. See [`docs/ADMIN_PANEL.md`](docs/ADMIN_PANEL.md). Needs [`supabase/migrations/20261026_admin_panel.sql`](supabase/migrations/20261026_admin_panel.sql) run once.
-
-## 💻 Running locally
+You need Node 20+ and a **separate** Supabase project for development (never point a local app at production).
 
 ```bash
-cp .env.example .env.local   # then fill in the values
 npm install
-npm run dev                  # http://localhost:3000
-npm run typecheck
+cp .env.example .env.local     # fill in the dev Supabase URL + secret key, AUTH_SECRET, CRON_SECRET
+npm run dev:cabinet            # terminal 1: local MQTT broker + simulated cabinet
+npm run dev                    # terminal 2: http://localhost:3000
 ```
 
+Set `HIVEMQ_BROKER_URL=ws://localhost:18884/mqtt` in `.env.local`. **Never use the public broker locally**: the topic names are the real cabinet's, so a local borrow would open a real lock.
+
+Database for a new project: run `supabase/schema.sql`, then every file in `supabase/migrations/` in date order, in the Supabase SQL editor. Create admin/developer accounts with `node scripts/create-account.mjs`.
+
+With no email provider set, codes and emails print in the `npm run dev` terminal.
+
+The simulated cabinet answers like the firmware. Type a key + Enter to force outcomes: `n` next borrow not taken · `e` next return finds no umbrella · `w` wrong umbrella · `s` no result (lost answer) · `x` no "got it" · `o` offline/online · `t1`–`t4` take by hand · `r1`–`r4` put back by hand · `l` old firmware (no op ids) · `p` print slots.
+
+### Checks
+
+```bash
+npm run typecheck
+npm test          # unit tests + cabinet-protocol tests against a real local MQTT broker
+npm run build
+```
+
+## Configuration
+
 | Variable | Purpose |
-| :--- | :--- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Database (server only) |
-| `AUTH_SECRET` | Signs session cookies and signup tokens (≥ 32 random characters) |
-| `DEV_INDEXES` | Index numbers that get the hardware testing console, e.g. `DEV001` |
-| `ADMIN_INDEXES` | Index numbers with the admin panel (default `ADMIN-ASTRIX`) |
-| `HIVEMQ_BROKER_URL`, `HIVEMQ_USERNAME`, `HIVEMQ_PASSWORD` | MQTT broker (optional; public broker if empty) |
-| `GMAIL_USER`, `GMAIL_APP_PASSWORD` or `RESEND_API_KEY` | Email delivery |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Database. The key is the project's secret (`sb_secret_…`) key; server only. |
+| `AUTH_SECRET` | Signs session cookies and signup tokens (≥ 32 random characters). Changing it signs everyone out. |
+| `CRON_SECRET` | Protects `/api/cron/overdue` (Vercel Cron sends it automatically). |
+| `ADMIN_INDEXES`, `DEV_INDEXES` | Comma-separated admin and hardware-tester accounts. |
+| `SIGNUP_EMAIL_DOMAINS` | Optional, e.g. `uom.lk`: only these email domains may sign up. |
+| `HIVEMQ_BROKER_URL`, `HIVEMQ_USERNAME`, `HIVEMQ_PASSWORD` | MQTT broker. Production must use a private broker with credentials. |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `GMAIL_FROM_NAME` or `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Email delivery. |
 
-Without an email provider, local development prints verification codes to the server console. In production, signup fails until email is configured.
+## Repository
 
-### Hardware tools
-* `npm run simulator` — interactive cabinet simulator (`firmware/mock_esp32.js`)
-* `npx tsx worker/mqtt-listener.ts` — read-only monitor that prints every cabinet command and response
-* `firmware/esp32_smart_umbrella.ino` — the cabinet firmware, all 4 slots in parallel (fill in WiFi, and broker login if using a private broker). The older one-slot-at-a-time version is tagged `v1.0-serial-cabinet` on the Darkempire2017 fork.
+```
+app/            pages (student app, admin panel) and API routes
+components/     UI kit (ui.tsx), cabinet diagram, developer console
+lib/            sessions, MQTT, cabinet sync, barcode decoder, hooks
+supabase/       schema.sql and migrations (incl. the borrow/return SQL functions)
+firmware/       ESP32 cabinet firmware and the old interactive simulator
+scripts/        dev-cabinet.mjs (local broker + simulated cabinet), create-account.mjs
+docs/           ADMIN_PANEL.md, OPERATIONS.md (going live, keys, broker, firmware)
+```
 
----
-
-## 🔒 Security notes
-* Secrets live only in environment variables. Never add fallback keys to source files.
-* API routes take the student from the session cookie, never from the request body.
-* Developer accounts are listed in `DEV_INDEXES`; there is no special password in the code.
-* Rate limits in `lib/rate-limit.ts` are per server instance. For production, back them with a shared store (Upstash Redis or Vercel KV).
+Going live, rotating keys, moving to a private broker and flashing the cabinet: see [docs/OPERATIONS.md](docs/OPERATIONS.md).
