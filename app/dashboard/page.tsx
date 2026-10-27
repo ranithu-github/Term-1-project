@@ -8,12 +8,12 @@ import {
   Lock,
   Unlock,
   CheckCircle2,
-  Clock,
   RefreshCw,
-  Check,
   Wrench,
   AlertCircle,
   Info,
+  X,
+  WifiOff,
 } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import type { MeResponse, PublicSlot } from '@/lib/types';
@@ -236,8 +236,8 @@ export default function DashboardPage() {
       type: 'info',
       text:
         kind === 'borrow'
-          ? '🔎 Finding a free slot for you…'
-          : `🔓 Opening ${slotHint ? `Slot #${slotHint}` : 'your slot'}… Dock the umbrella and wait for lock confirmation.`,
+          ? 'Finding a free slot...'
+          : `Opening ${slotHint ? `slot ${slotHint}` : 'your slot'}. Dock the umbrella and wait for the lock.`,
     });
 
     try {
@@ -250,27 +250,27 @@ export default function DashboardPage() {
         setPendingSlot(assigned.slot);
         setNotification({
           type: 'info',
-          text: `🔓 Take Umbrella ${assigned.umbrella_number} from Slot ${assigned.slot}. The lock is opening now.`,
+          text: `Take umbrella ${assigned.umbrella_number} from slot ${assigned.slot}.`,
         });
         startTakeCountdown();
       });
 
       if (json.success) {
         setScreenGlow(null);
-        setNotification({ type: 'success', text: `✅ ${json.message}` });
+        setNotification({ type: 'success', text: json.message || 'Done.' });
       } else if (json.reason === 'WRONG_UMBRELLA') {
         triggerErrorGlow();
         setNotification({
           type: 'error',
-          text: `❌ Wrong umbrella in Slot #${json.slot}. The slot is left unlocked — take it out and return your own umbrella.`,
+          text: `Wrong umbrella in slot ${json.slot}. Take it out and return your own.`,
         });
       } else {
         triggerErrorGlow();
-        setNotification({ type: 'error', text: `⚠️ ${json.message || 'The request failed. Please try again.'}` });
+        setNotification({ type: 'error', text: json.message || 'Something went wrong. Please try again.' });
       }
     } catch {
       triggerErrorGlow();
-      setNotification({ type: 'error', text: 'Could not connect to the station. Please check your connection.' });
+      setNotification({ type: 'error', text: "Can't reach the station. Check your connection." });
     } finally {
       stopCountdown();
       setPendingSlot(null);
@@ -377,7 +377,7 @@ export default function DashboardPage() {
   const handleBorrow = async () => {
     if (!nextAvailableSlot) {
       triggerErrorGlow();
-      setNotification({ type: 'error', text: 'No umbrellas currently available at this station.' });
+      setNotification({ type: 'error', text: 'No umbrellas free right now.' });
       return;
     }
     await runCabinetAction('borrow', nextAvailableSlot.slot, {});
@@ -408,160 +408,108 @@ export default function DashboardPage() {
     }
   };
 
+  const freeCount = availableSlotsList.length;
+  const headline: [string, string] = isDevAccount
+    ? ['Hardware', 'console.']
+    : activeLoan
+    ? ['Return your', 'umbrella.']
+    : freeCount > 0
+    ? [`${freeCount} umbrella${freeCount === 1 ? '' : 's'}`, 'ready.']
+    : ['No umbrellas', 'right now.'];
+
   return (
-    <div className="flex-1 flex flex-col justify-between bg-slate-50 select-none overflow-y-auto relative">
-      {/* ============================================================================== */}
-      {/* DYNAMIC SCREEN GLOW AURA (Green on Borrow, Blue on Return, Red on Error)       */}
-      {/* ============================================================================== */}
+    <div className="flex-1 flex flex-col bg-brand-600 font-body select-none relative">
+      {/* Thin status bar while the cabinet is working, or after an error */}
       {screenGlow && (
         <div
-          className={`pointer-events-none fixed inset-0 max-w-md mx-auto z-40 transition-all duration-500 ease-in-out ${
-            screenGlow === 'green'
-              ? 'ring-8 ring-emerald-500/80 shadow-[inset_0_0_60px_15px_rgba(16,185,129,0.45)]'
-              : screenGlow === 'blue'
-              ? 'ring-8 ring-sky-500/80 shadow-[inset_0_0_60px_15px_rgba(14,165,233,0.45)]'
-              : 'ring-8 ring-rose-500/90 shadow-[inset_0_0_60px_15px_rgba(244,63,94,0.55)]'
+          className={`fixed top-0 inset-x-0 max-w-md mx-auto h-1 z-50 ${
+            screenGlow === 'green' ? 'bg-emerald-400 animate-pulse' : screenGlow === 'blue' ? 'bg-white animate-pulse' : 'bg-rose-500'
           }`}
-        >
-          {/* Top radiant light gradient */}
-          <div
-            className={`w-full h-36 bg-gradient-to-b opacity-50 animate-pulse ${
-              screenGlow === 'green'
-                ? 'from-emerald-500 via-emerald-400/20 to-transparent'
-                : screenGlow === 'blue'
-                ? 'from-sky-500 via-sky-400/20 to-transparent'
-                : 'from-rose-500 via-rose-400/30 to-transparent'
-            }`}
-          />
-
-          {/* Floating Glow Status Pill */}
-          <div className="absolute top-3 inset-x-0 flex justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div
-              className={`px-4 py-2 rounded-full text-xs font-black shadow-lg backdrop-blur-md flex items-center space-x-2 border ${
-                screenGlow === 'green'
-                  ? 'bg-emerald-950/85 text-emerald-200 border-emerald-400/40 shadow-emerald-500/25'
-                  : screenGlow === 'blue'
-                  ? 'bg-sky-950/85 text-sky-200 border-sky-400/40 shadow-sky-500/25'
-                  : 'bg-rose-950/90 text-rose-200 border-rose-400/40 shadow-rose-500/25'
-              }`}
-            >
-              <div
-                className={`w-2.5 h-2.5 rounded-full animate-ping ${
-                  screenGlow === 'green'
-                    ? 'bg-emerald-400'
-                    : screenGlow === 'blue'
-                    ? 'bg-sky-400'
-                    : 'bg-rose-400'
-                }`}
-              />
-              <span className="tracking-wide">
-                {screenGlow === 'green' && '🟢 Borrow in Progress… Lock Opening'}
-                {screenGlow === 'blue' && '🔵 Return in Progress… Verifying Umbrella Lock'}
-                {screenGlow === 'red' && '🔴 Operation Alert / Error'}
-              </span>
-            </div>
-          </div>
-        </div>
+          aria-hidden="true"
+        />
       )}
 
-      {/* Top Header & Station Info */}
-      <div className="p-5 space-y-3">
-        {/* Top Badges & Dev State Switcher */}
-        <div className="flex items-center justify-end">
-          {/* Interactive State Toggle (Visible in Dev Mode) */}
-          {!isStudentMode && (
-            <button
-              type="button"
-              onClick={toggleDemoState}
-              className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-200/80 hover:bg-sky-100 text-slate-700 hover:text-sky-700 transition border border-slate-300/60"
-              title="Toggle between State A and State B"
-            >
-              Switch to {activeLoan ? 'State A' : 'State B'}
-            </button>
-          )}
-        </div>
+      {/* Blue header band */}
+      <div className="relative px-7 pt-8 pb-20 text-white overflow-hidden">
+        <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-white/[0.07]" aria-hidden="true" />
 
-        {/* User Welcome */}
-        <div className="flex items-center justify-between pt-1">
-          <div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight">Smart Umbrella Station</h1>
-            <p className="text-xs text-slate-500">
-              Welcome, <span className="font-bold text-slate-700">{currentUserName}</span>
-            </p>
+        <div className="relative flex items-center justify-between min-h-9">
+          <span className="text-sm text-brand-100 truncate">
+            Hi, <span className="font-semibold text-white">{currentUserName || 'there'}</span>
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
             {isAdmin && (
-              <Link href="/admin" className="inline-block mt-1 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg hover:bg-purple-100">
-                Open admin panel
+              <Link
+                href="/admin"
+                className="text-xs font-semibold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full transition"
+              >
+                Admin
               </Link>
             )}
+            {/* Interactive State Toggle (Visible in Dev Mode) */}
+            {!isStudentMode && (
+              <button
+                type="button"
+                onClick={toggleDemoState}
+                className="text-xs font-semibold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full transition"
+                title="Toggle between State A and State B"
+              >
+                {activeLoan ? 'State A' : 'State B'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={refreshStationData}
+              aria-label="Refresh"
+              className="w-9 h-9 -mr-2 rounded-full hover:bg-white/15 flex items-center justify-center transition"
+            >
+              <RefreshCw className={`w-[18px] h-[18px] ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <button
-            onClick={refreshStationData}
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-sky-600 shadow-sm transition active:scale-95"
-            title="Refresh status"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
         </div>
 
+        <h1 className="relative mt-14 font-display text-[44px] leading-[1.02] font-semibold">
+          {headline[0]}
+          <br />
+          {headline[1]}
+        </h1>
+      </div>
+
+      {/* White sheet */}
+      <div className="flex-1 -mt-10 bg-white rounded-tl-[40px] px-7 pt-9 pb-8 space-y-5">
         {/* Cabinet Offline Banner */}
         {cabinetOffline && (
-          <div className="p-3.5 rounded-2xl text-xs bg-slate-800 text-white border border-slate-700 shadow-sm" role="status">
-            <p className="font-bold">The umbrella cabinet is offline</p>
-            <p className="text-slate-300 mt-0.5">Borrowing and returning are paused until it reconnects. This page updates by itself.</p>
-          </div>
+          <p className="px-4 py-3 rounded-xl bg-slate-100 text-slate-700 text-sm flex items-center gap-2" role="status">
+            <WifiOff className="w-4 h-4 shrink-0 text-slate-500" />
+            <span>Cabinet offline. Borrowing is paused.</span>
+          </p>
         )}
 
         {/* Notifications & Hardware Feedback */}
         {notification && (
           <div
-            className={`p-3.5 rounded-2xl text-xs flex items-start space-x-2.5 animate-in fade-in slide-in-from-top-1 shadow-sm ${
+            className={`px-4 py-3 rounded-xl text-sm flex items-start gap-2 ${
               notification.type === 'success'
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                ? 'bg-emerald-50 text-emerald-800'
                 : notification.type === 'error'
-                ? 'bg-rose-50 text-rose-900 border border-rose-200'
-                : 'bg-sky-50 text-sky-900 border border-sky-200'
+                ? 'bg-rose-50 text-rose-800'
+                : 'bg-brand-50 text-brand-900'
             }`}
           >
-            {notification.type === 'success' && (
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-            )}
-            {notification.type === 'error' && (
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-            )}
-            {notification.type === 'info' && (
-              <Info className="w-4 h-4 shrink-0 mt-0.5 text-sky-600" />
-            )}
-            <span className="leading-relaxed flex-1">{notification.text}</span>
+            {notification.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />}
+            {notification.type === 'error' && <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />}
+            {notification.type === 'info' && <Info className="w-4 h-4 shrink-0 mt-0.5 text-brand-500" />}
+            <span className="flex-1">{notification.text}</span>
             <button
               type="button"
               onClick={dismissNotification}
-              className="text-slate-400 hover:text-slate-600 text-xs font-bold px-1 transition"
-              title="Dismiss notification"
+              aria-label="Dismiss"
+              className="p-1 -m-1 opacity-50 hover:opacity-100 transition"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
-
-        {/* DEV001 Super-User Mode Banner */}
-        {isDevAccount && (
-          <div className="bg-purple-900/10 border border-purple-500/30 rounded-2xl p-3 flex items-center justify-between text-xs text-purple-900 shadow-sm">
-            <div className="flex items-center space-x-2">
-              <span className="text-base">🛠️</span>
-              <div>
-                <p className="font-bold">DEV001 Developer Account Active</p>
-                <p className="text-[10px] text-purple-700 font-medium">Multi-borrow allowed & click any slot below to eject/borrow directly</p>
-              </div>
-            </div>
-            <span className="text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded-full font-mono uppercase font-bold">
-              DEV MODE
-            </span>
-          </div>
-        )}
-
-        {/* ============================================================================== */}
-        {/* DYNAMIC DASHBOARD DISPLAY: DEV001 TEST MATRIX vs STUDENT 2-STATE VIEW          */}
-        {/* ============================================================================== */}
 
         {isDevAccount ? (
           /* ============================================================================ */
@@ -716,212 +664,123 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : !activeLoan ? (
-          /* ============================================================================ */
-          /* STATE A: "WHEN BORROWING" (Standard Student View)                            */
-          /* ============================================================================ */
-          <div className="space-y-4">
-            {/* Assigned Slot Card: which umbrella THIS student must take */}
+          /* STATE A: ready to borrow */
+          <>
+            {/* Assigned slot: which umbrella THIS student must take */}
             {actionInProgress === 'borrow' && (
-              <div
-                className="bg-white border-2 border-emerald-400 rounded-3xl p-5 shadow-lg shadow-emerald-500/20 text-center space-y-1"
-                aria-live="polite"
-              >
+              <div className="rounded-2xl bg-brand-600 text-white p-5 text-center" aria-live="polite">
                 {pendingSlot ? (
                   <>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Your umbrella</p>
-                    <p className="text-4xl font-black text-slate-900 font-mono">Slot {pendingSlot}</p>
-                    <p className="text-sm font-bold text-slate-700">
-                      Take Umbrella {pendingSlot}, only from this slot
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {unlockCountdown !== null ? `${unlockCountdown}s left to take it` : 'The lock is opening…'}
+                    <p className="text-sm text-brand-100">Take your umbrella from</p>
+                    <p className="mt-1 font-display text-5xl font-semibold">Slot {pendingSlot}</p>
+                    <p className="mt-2 text-sm text-brand-100">
+                      {unlockCountdown !== null ? `${unlockCountdown}s left` : 'Opening the lock...'}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm font-bold text-slate-600 py-3">Finding a free slot for you…</p>
+                  <p className="py-3 text-sm">Finding a free slot...</p>
                 )}
               </div>
             )}
 
-            {/* State Banner */}
-            <div className="bg-gradient-to-br from-sky-600 to-sky-700 text-white p-5 rounded-3xl shadow-lg shadow-sky-600/20 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
-                  State A: Ready to Borrow
-                </span>
-                <span className="text-xs text-sky-100 font-mono">
-                  {availableSlotsList.length} of 4 Available
-                </span>
-              </div>
-
-              {/* Ready Slot Display */}
-              <div className="space-y-1">
-                <p className="text-xs text-sky-100 font-medium">Next Ready Umbrella</p>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-black tracking-tight">Available slot:</span>
-                  <span className="text-3xl font-black text-amber-300 font-mono">
-                    {nextAvailableSlot ? `Slot ${nextAvailableSlot.slot}` : 'None'}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-sky-100/90 leading-relaxed">
-                {nextAvailableSlot
-                  ? `Umbrella tag (${nextAvailableSlot.umbrella_id}) is docked. Tap "Borrow" below to open the lock.`
-                  : 'All umbrellas are currently in use. Please check back soon.'}
-              </p>
-            </div>
-
-            {/* 4-Slot Visual Matrix */}
-            <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                Physical Slots (1 - 4)
-              </span>
-
+            {/* Slots */}
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-brand-900">Slots</p>
               <div className="grid grid-cols-4 gap-2">
                 {slots.map((s) => {
                   // While borrowing, highlight the slot the server gave this student
                   const isMine = actionInProgress === 'borrow' && pendingSlot === s.slot;
-                  const isReady = actionInProgress === 'borrow' ? isMine : nextAvailableSlot?.slot === s.slot;
+                  const isNext = actionInProgress === 'borrow' ? isMine : nextAvailableSlot?.slot === s.slot;
                   return (
                     <div
                       key={s.slot}
-                      className={`p-2.5 rounded-2xl text-center border transition flex flex-col items-center justify-between space-y-1 ${
-                        isReady
-                          ? 'bg-amber-50 border-amber-300 shadow-sm ring-2 ring-amber-400/30'
+                      className={`rounded-xl py-3 text-center border transition ${
+                        isNext
+                          ? 'border-brand-500 bg-brand-50'
                           : s.availability
-                          ? 'bg-emerald-50/60 border-emerald-200'
-                          : 'bg-slate-50 border-slate-200 text-slate-400'
+                          ? 'border-brand-100 bg-white'
+                          : 'border-transparent bg-slate-50'
                       }`}
                     >
-                      <span className="text-[10px] font-bold text-slate-500 font-mono">
-                        #{s.slot}
-                      </span>
-                      <div
-                        className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                          s.availability ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
-                        }`}
-                      >
-                        <Umbrella className="w-4 h-4" />
-                      </div>
-                      <span
-                        className={`text-[9px] font-bold uppercase tracking-tight ${
-                          s.availability ? 'text-emerald-700' : 'text-slate-400'
+                      <p className={`text-lg font-semibold ${s.availability ? 'text-brand-900' : 'text-slate-300'}`}>
+                        {s.slot}
+                      </p>
+                      <p
+                        className={`mt-0.5 text-xs ${
+                          isNext ? 'font-semibold text-brand-600' : s.availability ? 'text-slate-500' : 'text-slate-400'
                         }`}
                       >
                         {isMine ? 'Yours' : s.availability ? 'Ready' : 'Out'}
-                      </span>
+                      </p>
                     </div>
                   );
                 })}
               </div>
             </div>
-          </div>
+          </>
         ) : (
-          /* ============================================================================ */
-          /* STATE B: "WHEN RETURNING" (User has an active loan)                           */
-          /* ============================================================================ */
-          <div className="space-y-4">
-            {/* State Banner */}
-            <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-5 rounded-3xl shadow-lg shadow-amber-500/20 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
-                  State B: Active Loan
-                </span>
-                <span className="text-xs text-amber-100 font-mono flex items-center space-x-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{activeLoan.is_overdue ? 'Overdue — please return' : '24h Due Window'}</span>
-                </span>
-              </div>
-
-              {/* Borrowed Umbrella ID */}
-              <div className="space-y-1">
-                <p className="text-xs text-amber-100 font-medium">Borrowed Umbrella ID</p>
-                <div className="text-2xl font-black font-mono tracking-wider">
-                  {activeLoan.umbrella_id}
-                </div>
-              </div>
-
-              {/* Since When Elapsed Timer */}
-              <div className="p-3 rounded-2xl bg-black/15 backdrop-blur-sm flex items-center justify-between text-xs">
-                <span className="text-amber-100">Since when:</span>
-                <span className="font-bold text-white font-mono bg-white/20 px-2.5 py-0.5 rounded-lg">
-                  {getElapsedDuration(activeLoan.borrowed_time)}
-                </span>
-              </div>
-
-              <p className="text-xs text-amber-100/90 leading-relaxed">
-                You have an active umbrella loan. Return it to Slot #{activeLoan.slot ?? '?'} by tapping &quot;Return&quot; below. Each umbrella goes back to its own slot.
-              </p>
+          /* STATE B: has an active loan */
+          <div className="rounded-2xl bg-brand-50 divide-y divide-brand-100 text-sm">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <span className="text-slate-500">Umbrella</span>
+              <span className="font-semibold tracking-wider text-brand-900">{activeLoan.umbrella_id}</span>
             </div>
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <span className="text-slate-500">Borrowed</span>
+              <span className="font-semibold text-brand-900">{getElapsedDuration(activeLoan.borrowed_time)}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <span className="text-slate-500">Return to</span>
+              <span className="font-semibold text-brand-900">Slot {activeLoan.slot ?? '?'}</span>
+            </div>
+            {activeLoan.is_overdue && (
+              <p className="px-4 py-3.5 font-medium text-rose-700">Overdue. Please return it soon.</p>
+            )}
           </div>
         )}
 
-        {/* ============================================================================== */}
-        {/* CORE DUAL BUTTONS (Standard Student Borrow vs Return Matrix)                   */}
-        {/* ============================================================================== */}
-        {!isDevAccount && (
-          <div className="pt-2 space-y-2.5">
-            {/* 1. Borrow Button */}
-            <button
-              type="button"
-              onClick={() => handleBorrow()}
-              disabled={Boolean(activeLoan) || !nextAvailableSlot || actionInProgress !== null || unlockCountdown !== null || cabinetOffline}
-              className={`w-full py-4 px-4 rounded-2xl font-black text-sm tracking-wide flex items-center justify-center space-x-2 transition shadow-md ${
-                unlockCountdown !== null
-                  ? 'bg-amber-500 text-white shadow-amber-500/30 animate-pulse cursor-wait'
-                  : !activeLoan && nextAvailableSlot && !cabinetOffline
-                  ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/30 active:scale-[0.99] cursor-pointer'
-                  : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed border border-slate-300/40'
-              }`}
-            >
-              {unlockCountdown !== null ? (
-                <>
-                  <Unlock className="w-5 h-5 animate-bounce" />
-                  <span>Take Umbrella {pendingSlot} from Slot {pendingSlot} ({unlockCountdown}s)</span>
-                </>
-              ) : actionInProgress === 'borrow' ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : !activeLoan ? (
-                <>
-                  <Unlock className="w-4 h-4" />
-                  <span>{nextAvailableSlot ? 'Borrow Umbrella' : 'Borrow Umbrella (Unavailable)'}</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-4 h-4" />
-                  <span>Borrow (1 Umbrella Limit Reached)</span>
-                </>
-              )}
-            </button>
-
-            {/* 2. Return Button */}
+        {/* One main action: borrow, or return when there is an active loan */}
+        {!isDevAccount &&
+          (activeLoan ? (
             <button
               type="button"
               onClick={handleReturn}
-              disabled={!activeLoan || actionInProgress !== null || cabinetOffline}
-              className={`w-full py-4 px-4 rounded-2xl font-black text-sm tracking-wide flex items-center justify-center space-x-2 transition shadow-md ${
-                activeLoan && !cabinetOffline
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 active:scale-[0.99] cursor-pointer'
-                  : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed border border-slate-300/40'
-              }`}
+              disabled={actionInProgress !== null || cabinetOffline}
+              className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-50 active:scale-[0.99]"
             >
               {actionInProgress === 'return' ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : activeLoan ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Return Umbrella ({activeLoan.umbrella_id})</span>
-                </>
               ) : (
                 <>
                   <Lock className="w-4 h-4" />
-                  <span>Return (No Active Loan)</span>
+                  <span>Return umbrella</span>
                 </>
               )}
             </button>
-          </div>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleBorrow()}
+              disabled={!nextAvailableSlot || actionInProgress !== null || unlockCountdown !== null || cabinetOffline}
+              className="w-full !mt-7 py-4 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[15px] flex items-center justify-center gap-2 transition disabled:opacity-50 active:scale-[0.99]"
+            >
+              {unlockCountdown !== null ? (
+                <>
+                  <Unlock className="w-4 h-4" />
+                  <span>
+                    Take it from slot {pendingSlot} · {unlockCountdown}s
+                  </span>
+                </>
+              ) : actionInProgress === 'borrow' ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Unlock className="w-4 h-4" />
+                  <span>{nextAvailableSlot ? 'Borrow umbrella' : 'None free'}</span>
+                </>
+              )}
+            </button>
+          ))}
       </div>
 
       {/* Persistent Bottom Nav */}
