@@ -6,6 +6,7 @@ import { sendWelcomeSignupEmail } from '@/lib/email';
 import { safeEqual } from '@/lib/otp';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { logActivity, raiseAlert } from '@/lib/events';
+import { createSessionValue, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -121,12 +122,17 @@ export async function POST(request: Request) {
         index_no: payload.index_no, actor: payload.index_no,
       });
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: 'Account verified successfully and password set.',
         is_reset: false,
         user: { index_no: payload.index_no, username: payload.username, email: payload.email },
       });
+
+      // Sign the new student in straight away: the signup page continues to the dashboard
+      const session = createSessionValue(payload.index_no, hashedPassword);
+      response.cookies.set(SESSION_COOKIE, session.value, { ...sessionCookieOptions, maxAge: session.maxAgeSeconds });
+      return response;
     }
 
     // ------------------------------------------------------------------
