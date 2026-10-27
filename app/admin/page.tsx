@@ -198,8 +198,23 @@ export default function AdminPage() {
     loadList();
   }, [loadList]);
 
-  const runAction = async (action: string, payload: Record<string, unknown>, confirmText?: string) => {
-    if (confirmText && !window.confirm(confirmText)) return;
+  // Risky actions ask first in an in-page sheet (not a browser pop-up)
+  const [confirming, setConfirming] = useState<{ action: string; payload: Record<string, unknown>; text: string } | null>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!confirming) return;
+    confirmRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setConfirming(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirming]);
+
+  const runAction = async (action: string, payload: Record<string, unknown>, confirmText?: string, confirmed = false) => {
+    if (confirmText && !confirmed) {
+      setConfirming({ action, payload, text: confirmText });
+      return;
+    }
+    setConfirming(null);
     const key = `${action}:${JSON.stringify(payload)}`;
     setBusyAction(key);
     try {
@@ -555,7 +570,7 @@ export default function AdminPage() {
                     <button onClick={() => runAction('user.resetPassword', { index_no: u.index_no }, `Email a password reset code to ${u.index_no}?`)} className={`${btn} border-sky-300 bg-sky-50 text-sky-800`}>
                       Send reset code
                     </button>
-                    <button onClick={() => runAction('user.delete', { index_no: u.index_no }, `Delete ${u.index_no} and their loan history? This can't be undone.`)} className={`${btn} border-rose-300 bg-rose-50 text-rose-800`}>
+                    <button onClick={() => runAction('user.delete', { index_no: u.index_no }, `Delete ${u.index_no}? This can't be undone. (Accounts with loan history can't be deleted: lock them instead.)`)} className={`${btn} border-rose-300 bg-rose-50 text-rose-800`}>
                       Delete
                     </button>
                   </div>
@@ -572,6 +587,27 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Confirm sheet for risky actions */}
+      {confirming && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 motion-safe:animate-[fade-in_150ms_ease-out_both]" onClick={() => setConfirming(null)}>
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            className="glass w-full max-w-[440px] rounded-t-[28px] p-5 pb-[calc(var(--safe-bottom)+20px)] motion-safe:animate-[enter_250ms_var(--ease-drawer)_both]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="confirm-title" className="text-[1.0625rem] font-semibold leading-snug text-ink">{confirming.text}</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button ref={confirmRef} type="button" className="btn btn-danger btn-lg w-full" onClick={() => runAction(confirming.action, confirming.payload, confirming.text, true)}>
+                Yes, continue
+              </button>
+              <button type="button" className="btn btn-plain w-full" onClick={() => setConfirming(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
