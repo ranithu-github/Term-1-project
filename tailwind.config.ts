@@ -10,7 +10,7 @@ const config: Config = {
     extend: {
       colors: {
         navy: token('navy'),
-        blue: { DEFAULT: token('blue'), press: token('blue-press') },
+        blue: { DEFAULT: token('blue'), 2: token('blue-2'), press: token('blue-press') },
         sky: token('sky'),
         paper: token('paper'),
         card: token('card'),
@@ -23,7 +23,7 @@ const config: Config = {
         brand: { 50: '#f1f5fd', 100: '#e2eafa', 200: '#c3d3f4', 300: '#94b0ea', 500: '#2f5fd0', 600: '#1f4fc2', 700: '#183f9e', 900: '#0f1e3d' },
       },
       fontFamily: {
-        display: ['var(--font-display)', 'Georgia', 'serif'],
+        display: ['var(--font-body)', '-apple-system', 'system-ui', 'sans-serif'],
         body: ['var(--font-body)', '-apple-system', 'system-ui', 'sans-serif'],
       },
       borderRadius: {

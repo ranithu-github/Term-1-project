@@ -37,9 +37,9 @@ export default function ProfilePage() {
     <div className="flex min-h-[100dvh] flex-col">
       <main className="flex flex-1 flex-col gap-4 px-4 pb-6 pt-[calc(var(--safe-top)+24px)]">
         <section className="card enter flex items-center gap-4 p-5" aria-label="Your account">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-navy text-xl font-bold text-white" aria-hidden="true">{initials}</div>
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white/75 text-xl font-semibold shadow-[inset_0_1px_0_#fff,0_8px_20px_-8px_rgb(30_45_90/0.35)]" aria-hidden="true">{initials}</div>
           <div className="min-w-0">
-            <h1 className="truncate text-[1.375rem] font-bold leading-tight tracking-[-0.015em]">{user?.username || ' '}</h1>
+            <h1 className="truncate text-[1.5rem] font-semibold leading-tight tracking-[-0.025em]">{user?.username || ' '}</h1>
             <p className="num text-[0.9375rem] text-ink-2">{user?.index_no}</p>
           </div>
         </section>
@@ -87,7 +87,7 @@ export default function ProfilePage() {
               We couldn&apos;t reach the server. Check your connection, then tap Sign out again.
             </Notice>
           )}
-          <button type="button" onClick={signOut} disabled={signingOut} className="btn btn-lg w-full bg-card text-danger shadow-1">
+          <button type="button" onClick={signOut} disabled={signingOut} className="btn btn-secondary btn-lg w-full text-danger">
             {signingOut ? <Spinner className="h-5 w-5" /> : <LogOut className="h-5 w-5" strokeWidth={2} aria-hidden="true" />} Sign out
           </button>
           {loan && <p className="mt-2 text-center text-[0.8125rem] text-ink-2">Signing out doesn&apos;t end your loan.</p>}

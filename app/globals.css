@@ -7,31 +7,44 @@
    Palette contrast (normal text, AA): white on --blue 6.47:1,
    --ink on white 14.33:1, --ink-2 on --paper 6.06:1.
    ===================================================================== */
+/* =====================================================================
+   ASTRIX · Canopy. Light Liquid Glass over a misty monsoon sky.
+   Contrast (normal text, AA): --ink on white 17.6:1, --ink-2 on the sky 8.4:1,
+   --ink-3 on white 4.7:1, white on --ink 17.6:1, --blue text on white 5.4:1.
+   ===================================================================== */
 :root {
-  --navy: 21 52 91;        /* #15345B  brand, headers */
-  --blue: 36 87 197;       /* #2457C5  primary action */
-  --blue-press: 29 73 168; /* #1D49A8 */
-  --sky: 232 240 252;      /* #E8F0FC  pale blue surfaces */
-  --paper: 245 248 252;    /* #F5F8FC  page */
+  --navy: 11 22 38;        /* #0B1626  ink capsule: the one primary action */
+  --blue: 61 90 254;       /* #3D5AFE  signal: the slot that's open, links */
+  --blue-2: 124 155 255;   /* #7C9BFF  signal highlight */
+  --blue-press: 43 68 214; /* #2B44D6 */
+  --sky: 232 237 255;      /* #E8EDFF  pale signal surfaces */
+  --paper: 233 238 248;    /* #E9EEF8  sky base */
   --card: 255 255 255;
-  --ink: 21 43 70;         /* #152B46  primary text */
-  --ink-2: 76 96 120;      /* #4C6078  secondary text */
-  --ink-3: 107 124 145;    /* #6B7C91  tertiary (large text / icons only) */
-  --line: 21 43 70;        /* used at low alpha for dividers */
-  --success: 20 108 67;    /* #146C43 */
-  --success-bg: 231 244 236;
-  --caution: 138 75 8;     /* #8A4B08 */
-  --caution-bg: 255 244 224;
+  --ink: 11 22 38;         /* #0B1626  primary text */
+  --ink-2: 58 74 96;       /* #3A4A60  secondary text */
+  --ink-3: 92 107 128;     /* #5C6B80  tertiary */
+  --line: 11 22 38;        /* used at low alpha for dividers */
+  --success: 14 125 80;    /* #0E7D50 */
+  --success-bg: 226 245 236;
+  --caution: 154 54 12;    /* #9A360C */
+  --caution-bg: 255 238 226;
   --danger: 180 35 24;     /* #B42318 */
   --danger-bg: 253 236 234;
 
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
-  --radius-xl: 28px;
+  --radius-sm: 16px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-xl: 32px;
 
-  --shadow-1: 0 1px 2px rgb(16 35 64 / 0.06), 0 4px 14px rgb(16 35 64 / 0.06);
-  --shadow-2: 0 2px 6px rgb(16 35 64 / 0.08), 0 14px 36px rgb(16 35 64 / 0.12);
+  --shadow-1: 0 1px 2px rgb(20 30 60 / 0.06), 0 18px 40px -12px rgb(30 45 90 / 0.18);
+  --shadow-2: 0 2px 6px rgb(20 30 60 / 0.08), 0 24px 50px -16px rgb(30 45 90 / 0.28);
+
+  /* The sky every screen sits on */
+  --sky-gradient:
+    radial-gradient(120% 60% at 15% 0%, #F4F7FF 0%, transparent 60%),
+    radial-gradient(90% 55% at 100% 30%, #D8E1FF 0%, transparent 60%),
+    radial-gradient(80% 60% at 0% 100%, #FBE7DA 0%, transparent 60%),
+    linear-gradient(180deg, #E9EEF8 0%, #DCE4F2 55%, #E8E4EE 100%);
 
   /* Motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -53,6 +66,7 @@ body {
   min-height: 100dvh;
   color: rgb(var(--ink));
   background: rgb(var(--paper));
+  font-feature-settings: 'cv11', 'ss01';
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -71,35 +85,61 @@ body {
 
 @layer components {
   /* ---------- Surfaces ---------- */
+  /* The sky: a soft gradient with faint rain streaks near the top */
+  .sky { position: relative; isolation: isolate; background: var(--sky-gradient); }
+  .sky::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.35;
+    background: repeating-linear-gradient(104deg, transparent 0 22px, rgb(255 255 255 / 0.55) 22px 23px, transparent 23px 61px);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 60%);
+    mask-image: linear-gradient(180deg, #000 0%, transparent 60%);
+  }
+
+  /* Cards are frosted glass over the sky */
   .card {
-    background: rgb(var(--card));
+    background: rgb(255 255 255 / 0.58);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.75), inset 0 0 0 1px rgb(255 255 255 / 0.35), var(--shadow-1);
     border: 1px solid transparent; /* keeps an edge in forced-colors mode */
   }
 
-  /* Liquid glass: only for chrome that floats over content (bars, docks, sheets) */
+  /* Liquid glass chrome that floats over content (bars, docks, sheets) */
   .glass {
-    background: rgb(255 255 255 / 0.72);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    backdrop-filter: blur(22px) saturate(180%);
+    background: rgb(255 255 255 / 0.62);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
     box-shadow:
-      inset 0 0.5px 0 rgb(255 255 255 / 0.9),
-      inset 0 0 0 0.5px rgb(255 255 255 / 0.55),
-      0 8px 28px rgb(16 35 64 / 0.12);
-    border: 1px solid rgb(var(--line) / 0.06);
-  }
-  .glass-dark {
-    background: rgb(21 52 91 / 0.42);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    backdrop-filter: blur(18px) saturate(160%);
-    box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.28), inset 0 0 0 0.5px rgb(255 255 255 / 0.14);
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 0 0 1px rgb(255 255 255 / 0.45),
+      0 12px 32px -10px rgb(30 45 90 / 0.22);
     border: 1px solid transparent;
   }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass { background: rgb(var(--card)); }
-    .glass-dark { background: rgb(var(--navy)); }
+  .glass-dark {
+    background: rgb(18 26 40 / 0.55);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(28px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+    border: 1px solid transparent;
   }
+  /* Without backdrop blur (older/low-power browsers) glass becomes solid */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .card, .glass { background: rgb(var(--card)); }
+    .glass-dark { background: rgb(18 26 40); }
+  }
+
+  /* The loan pass: a dark card like a wallet pass */
+  .pass {
+    position: relative; overflow: hidden; color: #fff;
+    border-radius: 30px;
+    background: linear-gradient(150deg, #16233A 0%, #24365A 60%, #3D5AFE 140%);
+    box-shadow: 0 24px 50px -18px rgb(11 22 38 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.2);
+    border: 1px solid transparent;
+  }
+
+  /* Rendered assets sit on the sky with a soft coloured shadow */
+  .asset { display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+  .halo { position: absolute; border-radius: 9999px; filter: blur(30px); pointer-events: none; }
 
   /* ---------- Buttons ---------- */
   .btn {
@@ -109,7 +149,7 @@ body {
     gap: 0.5rem;
     min-height: 48px;
     padding: 0 1.25rem;
-    border-radius: var(--radius-md);
+    border-radius: 9999px;
     font-weight: 650;
     font-size: 1rem;
     letter-spacing: -0.005em;
@@ -121,17 +161,22 @@ body {
   }
   .btn:not(:disabled):active { scale: 0.96; }
   .btn:disabled { cursor: not-allowed; }
-  .btn-lg { min-height: 56px; font-size: 1.0625rem; border-radius: 18px; }
-  .btn-primary { background: rgb(var(--blue)); color: #fff; box-shadow: 0 1px 2px rgb(16 35 64 / 0.12), 0 6px 18px rgb(36 87 197 / 0.28); }
-  .btn-primary:not(:disabled):active { background: rgb(var(--blue-press)); }
+  .btn-lg { min-height: 58px; font-size: 1.0625rem; }
+  /* Primary: the dark ink capsule. There is only ever one on a screen. */
+  .btn-primary { background: rgb(var(--navy)); color: #fff; box-shadow: 0 10px 24px -8px rgb(11 22 38 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.18); }
+  .btn-primary:not(:disabled):active { background: #1C2A40; }
   .btn-primary:disabled { background: rgb(var(--ink) / 0.12); color: rgb(var(--ink-2)); box-shadow: none; }
-  .btn-secondary { background: rgb(var(--sky)); color: rgb(var(--navy)); }
+  .btn-secondary {
+    background: rgb(255 255 255 / 0.55); color: rgb(var(--ink));
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1px rgb(255 255 255 / 0.5);
+  }
   .btn-secondary:disabled { opacity: 0.55; }
   .btn-plain { background: transparent; color: rgb(var(--blue)); min-height: 44px; padding: 0 0.5rem; }
   .btn-danger { background: rgb(var(--danger)); color: #fff; }
   @media (hover: hover) and (pointer: fine) {
-    .btn-primary:not(:disabled):hover { background: rgb(var(--blue-press)); }
-    .btn-secondary:not(:disabled):hover { background: rgb(var(--blue) / 0.14); }
+    .btn-primary:not(:disabled):hover { background: #1C2A40; }
+    .btn-secondary:not(:disabled):hover { background: rgb(255 255 255 / 0.8); }
     .btn-plain:not(:disabled):hover { background: rgb(var(--blue) / 0.07); }
   }
 
@@ -145,10 +190,10 @@ body {
   }
   .field {
     width: 100%;
-    min-height: 52px;
-    padding: 0 1rem;
+    min-height: 56px;
+    padding: 0 1.125rem;
     border-radius: var(--radius-sm);
-    background: rgb(var(--card));
+    background: rgb(255 255 255 / 0.78);
     color: rgb(var(--ink));
     font-size: 1.0625rem; /* ≥16px: no zoom on iOS */
     border: 1px solid rgb(var(--ink) / 0.52); /* 3:1 boundary on card and paper */
@@ -176,7 +221,9 @@ body {
   .pill-ok { background: rgb(var(--success-bg)); color: rgb(var(--success)); }
   .pill-warn { background: rgb(var(--caution-bg)); color: rgb(var(--caution)); }
   .pill-bad { background: rgb(var(--danger-bg)); color: rgb(var(--danger)); }
-  .pill-quiet { background: rgb(var(--ink) / 0.06); color: rgb(var(--ink-2)); }
+  .pill-quiet { background: rgb(255 255 255 / 0.55); color: rgb(var(--ink-2)); box-shadow: inset 0 1px 0 #fff; }
+  .pill-ok, .pill-warn, .pill-bad { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6); }
+  .pill-signal { background: rgb(255 255 255 / 0.6); color: rgb(var(--blue)); box-shadow: inset 0 1px 0 #fff; }
 
   .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
 
@@ -194,6 +241,14 @@ body {
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.9) translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes lower {
+  from { transform: translate(-50%, 0); }
+  to { transform: translate(-50%, 22px); }
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
