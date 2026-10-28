@@ -54,7 +54,7 @@ interface CabinetSlot {
 interface Overview {
   admin: string;
   cabinet: { online: boolean | null; report_at: number | null; slots: CabinetSlot[] };
-  slots: { slot: number; umbrella_id: string; availability: boolean; borrowed_user: string | null; held: boolean }[];
+  slots: { slot: number; umbrella_id: string; availability: boolean; borrowed_user: string | null; held: boolean; admin_hold: boolean }[];
   open_loans: { record_id: string; umbrella_id: string; index_no: string; borrowed_time: string; due_time: string; status: string }[];
   counts: { users: number; open_loans: number; overdue_loans: number; open_alerts: number };
   alerts: AdminEvent[];
@@ -384,13 +384,14 @@ export default function AdminPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black font-mono text-slate-800">SLOT {s.slot}</span>
                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                        s.held ? 'bg-amber-100 text-amber-800' : s.availability ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        s.held || s.admin_hold ? 'bg-amber-100 text-amber-800' : s.availability ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {s.held ? 'Held' : s.availability ? 'Available' : 'Out'}
+                        {s.held || s.admin_hold ? 'Held' : s.availability ? 'Available' : 'Out'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600">
                       {s.held ? `Held for ${s.borrowed_user}` : loan ? `With ${loan.index_no}${loan.status === 'OVERDUE' ? ' (overdue)' : ''}` : s.availability ? 'In the station' : 'Out, no loan'}
+                      {s.admin_hold && ' · held by admin'}
                     </p>
                     <p className="text-[10px] text-slate-400 flex items-center gap-1">
                       <Umbrella className="w-3 h-3" />
@@ -452,6 +453,7 @@ export default function AdminPage() {
                   <span className="text-sm font-black font-mono">Slot {s.slot}</span>
                   <span className="text-[11px] text-slate-500">
                     {s.held ? `Held for ${s.borrowed_user}` : s.availability ? 'Available' : `Out${s.borrowed_user ? ` (${s.borrowed_user})` : ''}`}
+                    {s.admin_hold && <span className="ml-1.5 font-bold text-amber-700">· Held by admin</span>}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -466,12 +468,15 @@ export default function AdminPage() {
                       Release hold
                     </button>
                   )}
-                  <button onClick={() => runAction('slot.markAvailable', { slot: s.slot }, `Mark Slot ${s.slot} as available (umbrella in the station)?`)} className={`${btn} border-emerald-300 bg-emerald-50 text-emerald-800`}>
-                    Mark available
-                  </button>
-                  <button onClick={() => runAction('slot.markOut', { slot: s.slot }, `Mark Slot ${s.slot} as out?`)} className={`${btn} border-slate-300 bg-white text-slate-700`}>
-                    Mark out
-                  </button>
+                  {s.admin_hold ? (
+                    <button onClick={() => runAction('slot.unhold', { slot: s.slot }, `Release the hold on Slot ${s.slot}? Students will be able to borrow from it again.`)} disabled={isBusy('slot.unhold', { slot: s.slot })} className={`${btn} border-amber-300 bg-amber-50 text-amber-800`}>
+                      Release hold
+                    </button>
+                  ) : (
+                    <button onClick={() => runAction('slot.hold', { slot: s.slot }, `Hold Slot ${s.slot}? Students won't be able to borrow from it until you release it. Returns still work.`)} disabled={isBusy('slot.hold', { slot: s.slot })} className={`${btn} border-amber-300 bg-white text-amber-800`}>
+                      Hold
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.umbrellas (
     umbrella_id VARCHAR(100) NOT NULL UNIQUE,       -- RFID tag UID of this slot's umbrella
     availability BOOLEAN NOT NULL DEFAULT TRUE,     -- true when the umbrella is docked
     borrowed_user VARCHAR(50) REFERENCES public.users(index_no) ON DELETE SET NULL,
+    admin_hold BOOLEAN NOT NULL DEFAULT FALSE,      -- held by an admin: students can't borrow from it
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -64,17 +64,24 @@ export async function POST(request: Request) {
         return ok(`Slot ${slot} released.`);
       }
 
-      case 'slot.markAvailable':
-      case 'slot.markOut': {
+      // Admin hold: students can't borrow from the slot until the admin releases it.
+      // Only admin_hold changes, so the cabinet sync (which sets availability) never undoes it.
+      case 'slot.hold':
+      case 'slot.unhold': {
         if (!validSlot) return fail('Choose a slot from 1 to 4.');
-        const available = action === 'slot.markAvailable';
-        await supabaseAdmin
-          .from('umbrellas')
-          .update(available ? { availability: true, borrowed_user: null } : { availability: false })
-          .eq('slot', slot);
-        if (available) await resolveAlerts('UMBRELLA_MISSING', `slot:${slot}`, actor);
-        await log(available ? 'ADMIN_SLOT_AVAILABLE' : 'ADMIN_SLOT_OUT', `Admin ${adminIndex} marked Slot ${slot} as ${available ? 'available' : 'out'}`, { slot });
-        return ok(`Slot ${slot} marked ${available ? 'available' : 'out'}.`);
+        const hold = action === 'slot.hold';
+        const { error } = await supabaseAdmin.from('umbrellas').update({ admin_hold: hold }).eq('slot', slot);
+        if (error) {
+          console.error('❌ [API/Admin] Admin hold update error:', error.message);
+          return fail(
+            error.message.includes('admin_hold')
+              ? 'The database needs updating first: run supabase/migrations/20261028_slot_admin_hold.sql in the Supabase SQL Editor.'
+              : 'Could not update the slot. Please try again.',
+            500
+          );
+        }
+        await log(hold ? 'ADMIN_SLOT_HOLD' : 'ADMIN_SLOT_UNHOLD', `Admin ${adminIndex} ${hold ? 'put a hold on' : 'released the admin hold on'} Slot ${slot}`, { slot });
+        return ok(hold ? `Slot ${slot} is on hold. Students can't borrow from it until you release it.` : `Slot ${slot} released.`);
       }
 
       // ---------------- Loans ----------------

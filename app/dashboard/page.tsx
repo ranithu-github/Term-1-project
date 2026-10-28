@@ -505,12 +505,12 @@ export default function DashboardPage() {
       <div
         key={s.slot}
         className={`astrix-slot ${s.availability ? 'ready' : 'out'} ${isSelected ? 'selected' : ''}`}
-        aria-label={`Slot ${s.slot}: ${isMine ? 'assigned to you' : activeLoan?.slot === s.slot ? 'your loan' : s.availability ? 'ready' : 'out'}`}
+        aria-label={`Slot ${s.slot}: ${isMine ? 'assigned to you' : activeLoan?.slot === s.slot ? 'your loan' : s.availability ? 'ready' : s.admin_hold ? 'on hold' : 'out'}`}
       >
         <span className="astrix-slot-number">#{s.slot}</span>
         <span className="astrix-slot-icon"><Umbrella aria-hidden="true" /></span>
         <span className="astrix-slot-state">
-          {isMine || activeLoan?.slot === s.slot ? 'Yours' : s.availability ? 'Ready' : 'Out'}
+          {isMine || activeLoan?.slot === s.slot ? 'Yours' : s.availability ? 'Ready' : s.admin_hold ? 'Held' : 'Out'}
         </span>
       </div>
     );
@@ -754,7 +754,7 @@ export default function DashboardPage() {
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
-                        {s.availability ? 'Docked' : 'Empty'}
+                        {s.admin_hold ? 'Held' : s.availability ? 'Docked' : 'Empty'}
                       </span>
                     </div>
 

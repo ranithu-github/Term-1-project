@@ -43,7 +43,8 @@ export const OPEN_LOAN_STATUSES = ['ACTIVE', 'OVERDUE'] as const;
 export interface PublicSlot {
   slot: number;
   umbrella_id: string;
-  availability: boolean;
+  availability: boolean;  // can be borrowed right now
+  admin_hold?: boolean;   // an admin is holding this slot
 }
 
 // Response of GET /api/me

@@ -51,7 +51,7 @@ export async function GET() {
 
     const { data: dbSlots, error: slotsError } = await supabaseAdmin
       .from('umbrellas')
-      .select('slot, umbrella_id, availability, borrowed_user')
+      .select('*')
       .order('slot', { ascending: true });
 
     if (slotsError) {
@@ -59,11 +59,12 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'Could not load station status.' }, { status: 500 });
     }
 
-    // A slot claimed by a borrow in progress is not offered to anyone else
+    // A slot claimed by a borrow in progress, or held by an admin, is not offered to anyone
     const slots: PublicSlot[] = (dbSlots || []).map((s) => ({
       slot: s.slot,
       umbrella_id: s.umbrella_id,
-      availability: Boolean(s.availability) && !s.borrowed_user,
+      availability: Boolean(s.availability) && !s.borrowed_user && s.admin_hold !== true,
+      admin_hold: s.admin_hold === true,
     }));
 
     const isDev = isDevIndex(indexNo);

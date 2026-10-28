@@ -15,7 +15,7 @@ Run [`supabase/migrations/20261026_admin_panel.sql`](../supabase/migrations/2026
 | :--- | :--- | :--- |
 | **Overview** | Cabinet online/offline, all 4 slots (database vs. cabinet report, lock state), open/overdue loans, student count, open alerts, latest activity | Refresh |
 | **Alerts** | Open alerts (optionally handled ones too) | Mark handled, mark all handled |
-| **Slots** | Each slot's state | Open lock, close lock, release a held slot, mark available, mark out |
+| **Slots** | Each slot's state | Open lock, close lock, release a held slot, Hold / Release hold (students can't borrow from a slot an admin holds until it is released; returns still work; needs `supabase/migrations/20261028_slot_admin_hold.sql`) |
 | **Loans** | Open / returned / all loans | Mark returned, extend +24 h, delete the record |
 | **Users** | Students with search, lock state, open loan | Lock/unlock, email a password reset code, delete (only without an open loan) |
 | **Activity** | Every borrow, return, sign-in, signup, password reset, cabinet event and admin action, with who did it | — |

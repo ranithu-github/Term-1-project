@@ -22,7 +22,7 @@ export async function GET() {
     await runAdminChecks();
 
     const [slotsRes, loansRes, usersCount, alertsRes, activityRes] = await Promise.all([
-      supabaseAdmin.from('umbrellas').select('slot, umbrella_id, availability, borrowed_user').order('slot'),
+      supabaseAdmin.from('umbrellas').select('*').order('slot'),
       supabaseAdmin
         .from('borrow_records')
         .select('record_id, umbrella_id, index_no, borrowed_time, due_time, status')
@@ -56,8 +56,12 @@ export async function GET() {
         slots: snapshot?.slots ?? [],
       },
       slots: (slotsRes.data || []).map((s) => ({
-        ...s,
+        slot: s.slot,
+        umbrella_id: s.umbrella_id,
+        availability: s.availability,
+        borrowed_user: s.borrowed_user,
         held: Boolean(s.availability && s.borrowed_user),
+        admin_hold: s.admin_hold === true,
       })),
       open_loans: openLoans,
       counts: {

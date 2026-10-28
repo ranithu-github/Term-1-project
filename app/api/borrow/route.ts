@@ -102,13 +102,16 @@ export async function POST(request: Request) {
     }
 
     // Claim the first free slot with one conditional update, so two students
-    // borrowing at the same moment can never be sent to the same slot
-    const { data: freeSlots, error: freeError } = await supabaseAdmin
+    // borrowing at the same moment can never be sent to the same slot.
+    // Slots an admin is holding are skipped (filtered here rather than in the
+    // query, so borrowing still works before the admin_hold column exists).
+    const { data: freeRows, error: freeError } = await supabaseAdmin
       .from('umbrellas')
-      .select('slot')
+      .select('*')
       .eq('availability', true)
       .is('borrowed_user', null)
       .order('slot', { ascending: true });
+    const freeSlots = (freeRows || []).filter((s) => s.admin_hold !== true);
 
     if (freeError) {
       console.error('❌ [API/Borrow] Slot lookup error:', freeError.message);
@@ -116,7 +119,7 @@ export async function POST(request: Request) {
     }
 
     let claimed: { slot: number; umbrella_id: string } | null = null;
-    for (const { slot } of freeSlots || []) {
+    for (const { slot } of freeSlots) {
       const { data: rows, error: claimError } = await supabaseAdmin
         .from('umbrellas')
         .update({ borrowed_user: indexNo })
