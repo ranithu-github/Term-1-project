@@ -273,8 +273,8 @@ export default function AdminPage() {
         <h1 className="text-lg font-black text-slate-900">Admin access only</h1>
         <p className="text-sm text-slate-500">Sign in with an admin account to open this page.</p>
         <div className="flex gap-2">
-          <Link href="/login" className="px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-bold">Sign in</Link>
-          <button onClick={() => router.push('/dashboard')} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-700">
+          <Link href="/login" className="px-4 py-2 rounded-[28px] bg-sky-600 text-white text-sm font-bold">Sign in</Link>
+          <button onClick={() => router.push('/dashboard')} className="px-4 py-2 rounded-[28px] border border-slate-300 text-sm font-bold text-slate-700">
             Dashboard
           </button>
         </div>
@@ -292,11 +292,11 @@ export default function AdminPage() {
     { id: 'activity', label: 'Activity' },
   ];
 
-  const btn = 'px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition disabled:opacity-40';
+  const btn = 'px-2.5 py-1.5 rounded-[22px] text-[11px] font-bold border transition disabled:opacity-40';
   const isBusy = (action: string, payload: Record<string, unknown>) => busyAction === `${action}:${JSON.stringify(payload)}`;
 
   const eventRow = (e: AdminEvent, withHandle: boolean) => (
-    <div key={e.id} className={`p-3 rounded-xl border-l-4 ${e.kind === 'ALERT' ? severityStyle[e.severity] : 'border-l-slate-300 bg-white'} border border-slate-200/70 space-y-1`}>
+    <div key={e.id} className={`p-3 rounded-[28px] border-l-4 ${e.kind === 'ALERT' ? severityStyle[e.severity] : 'border-l-slate-300 bg-white'} border border-slate-200/70 space-y-1`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wide">{e.type.replace(/_/g, ' ')}</span>
         <span className="text-[10px] text-slate-500" title={formatStationDateTime(e.created_at)}>{timeAgo(e.created_at)}</span>
@@ -326,7 +326,7 @@ export default function AdminPage() {
       <div className="p-4 pb-2 space-y-3 bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="p-1.5 rounded-lg hover:bg-slate-100" title="Back to dashboard">
+            <Link href="/dashboard" className="p-1.5 rounded-[22px] hover:bg-slate-100" title="Back to dashboard">
               <ArrowLeft className="w-4 h-4 text-slate-600" />
             </Link>
             <div>
@@ -336,7 +336,7 @@ export default function AdminPage() {
           </div>
           <button
             onClick={enableNotifications}
-            className={`p-2 rounded-xl border ${notifyOn ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-500'}`}
+            className={`p-2 rounded-[28px] border ${notifyOn ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-500'}`}
             title={notifyOn ? 'Browser notifications on' : 'Turn on browser notifications'}
           >
             {notifyOn ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
@@ -364,14 +364,14 @@ export default function AdminPage() {
         {toast && (
           <div
             onClick={() => setToast(null)}
-            className={`p-3 rounded-xl text-xs font-medium cursor-pointer ${toast.ok ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-rose-50 text-rose-900 border border-rose-200'}`}
+            className={`p-3 rounded-[28px] text-xs font-medium cursor-pointer ${toast.ok ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-rose-50 text-rose-900 border border-rose-200'}`}
           >
             {toast.text}
           </div>
         )}
 
         {o?.events_table_missing && (
-          <div className="p-3 rounded-xl text-xs bg-amber-50 text-amber-900 border border-amber-200">
+          <div className="p-3 rounded-[28px] text-xs bg-amber-50 text-amber-900 border border-amber-200">
             Alerts and the activity log need the database script <code className="font-mono">supabase/migrations/20261026_admin_panel.sql</code> to be run once in Supabase.
           </div>
         )}
@@ -393,7 +393,7 @@ export default function AdminPage() {
                   <p className="text-[11px] text-slate-500">Last slot report {timeAgo(o.cabinet.report_at)}</p>
                 </div>
               </div>
-              <button onClick={loadOverview} className="p-2 rounded-lg hover:bg-white/60" title="Refresh now">
+              <button onClick={loadOverview} className="p-2 rounded-[22px] hover:bg-white/60" title="Refresh now">
                 <RefreshCw className="w-4 h-4 text-slate-500" />
               </button>
             </div>
@@ -405,7 +405,7 @@ export default function AdminPage() {
                 ['Overdue', o.counts.overdue_loans],
                 ['Students', o.counts.users],
               ].map(([label, value]) => (
-                <div key={label as string} className="p-3 rounded-xl bg-white border border-slate-200">
+                <div key={label as string} className="p-3 rounded-[28px] bg-white border border-slate-200">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
                   <p className="text-xl font-black text-slate-900 tabular-nums">{value}</p>
                 </div>
@@ -417,7 +417,7 @@ export default function AdminPage() {
                 const c = o.cabinet.slots.find((x) => Number(x.slot) === s.slot);
                 const loan = o.open_loans.find((l) => l.umbrella_id === s.umbrella_id);
                 return (
-                  <div key={s.slot} className="p-3 rounded-xl bg-white border border-slate-200 space-y-1.5">
+                  <div key={s.slot} className="p-3 rounded-[28px] bg-white border border-slate-200 space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black font-mono text-slate-800">SLOT {s.slot}</span>
                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
@@ -484,7 +484,7 @@ export default function AdminPage() {
         {o && tab === 'slots' && (
           <div className="space-y-2">
             {o.slots.map((s) => (
-              <div key={s.slot} className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+              <div key={s.slot} className="p-3 rounded-[28px] bg-white border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-black font-mono">Slot {s.slot}</span>
                   <span className="text-[11px] text-slate-500">
@@ -526,7 +526,7 @@ export default function AdminPage() {
               ))}
             </div>
             {loans.length === 0 ? <p className="text-xs text-slate-500">No loans.</p> : loans.map((l) => (
-              <div key={l.record_id} className="p-3 rounded-xl bg-white border border-slate-200 space-y-1.5">
+              <div key={l.record_id} className="p-3 rounded-[28px] bg-white border border-slate-200 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black font-mono">{l.index_no}</span>
                   <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
@@ -567,11 +567,11 @@ export default function AdminPage() {
                 value={userQuery}
                 onChange={(e) => setUserQuery(e.target.value)}
                 placeholder="Search index number, name or email"
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+                className="w-full pl-9 pr-3 py-2 rounded-[28px] border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
               />
             </div>
             {users.length === 0 ? <p className="text-xs text-slate-500">No users found.</p> : users.map((u) => (
-              <div key={u.index_no} className="p-3 rounded-xl bg-white border border-slate-200 space-y-1.5">
+              <div key={u.index_no} className="p-3 rounded-[28px] bg-white border border-slate-200 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-black font-mono">{u.index_no}</span>
                   <span className="flex gap-1">
