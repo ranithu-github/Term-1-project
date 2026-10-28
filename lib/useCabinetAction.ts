@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MeResponse } from '@/lib/types';
 
 // =====================================================================
 // One borrow or return, from tap to verified result.
@@ -47,6 +48,24 @@ function buzz(ms: number) {
   }
 }
 
+/**
+ * The connection broke before we heard which slot. Wait a moment (the server
+ * claims the slot first), then read the student's state: a pending operation is
+ * still settling; a new loan (or a closed one) means the action went through.
+ */
+async function settleFromServer(action: CabinetKind, knownSlot?: number): Promise<Phase> {
+  await new Promise((r) => setTimeout(r, 1500));
+  const me: MeResponse | null = await fetch('/api/me', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (!me) return { kind: 'done', action, slot: null, result: { success: false, message: 'NETWORK' } };
+  if (me.pending) return { kind: 'uncertain', action, slot: me.pending.slot };
+  const loan = me.active_loan;
+  if (action === 'borrow' && loan) return { kind: 'done', action, slot: loan.slot ?? null, result: { success: true, slot: loan.slot ?? undefined, due_time: loan.due_time } };
+  if (action === 'return' && !loan) return { kind: 'done', action, slot: knownSlot ?? null, result: { success: true, slot: knownSlot } };
+  return { kind: 'done', action, slot: null, result: { success: false, message: 'NETWORK' } };
+}
+
 export function useCabinetAction(onSettled: () => void) {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -59,7 +78,7 @@ export function useCabinetAction(onSettled: () => void) {
   useEffect(() => clearTimers, []);
 
   const run = useCallback(
-    async (action: CabinetKind) => {
+    async (action: CabinetKind, knownSlot?: number) => {
       if (running.current) return; // one at a time; the server enforces this too
       running.current = true;
       clearTimers();
@@ -110,7 +129,7 @@ export function useCabinetAction(onSettled: () => void) {
         clearTimers();
         if (!result) {
           // The connection dropped before the cabinet answered: find out from the server
-          setPhase({ kind: 'uncertain', action, slot });
+          setPhase(slot !== null ? { kind: 'uncertain', action, slot } : await settleFromServer(action, knownSlot));
         } else if (result.uncertain) {
           setPhase({ kind: 'uncertain', action, slot: result.slot ?? slot });
         } else {
@@ -119,7 +138,12 @@ export function useCabinetAction(onSettled: () => void) {
         }
       } catch {
         clearTimers();
-        setPhase(slot !== null ? { kind: 'uncertain', action, slot } : { kind: 'done', action, slot: null, result: { success: false, message: 'NETWORK' } });
+        if (slot !== null) {
+          setPhase({ kind: 'uncertain', action, slot });
+        } else {
+          // The request may still have reached the cabinet: ask the server before saying anything
+          setPhase(await settleFromServer(action, knownSlot));
+        }
       } finally {
         running.current = false;
         onSettled();

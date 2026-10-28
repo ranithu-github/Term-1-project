@@ -201,13 +201,35 @@ export default function AdminPage() {
   // Risky actions ask first in an in-page sheet (not a browser pop-up)
   const [confirming, setConfirming] = useState<{ action: string; payload: Record<string, unknown>; text: string } | null>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const isConfirming = confirming !== null;
   useEffect(() => {
-    if (!confirming) return;
+    if (!isConfirming) return;
+    // Modal: focus stays inside the sheet and goes back to the button that opened it
+    const trigger = document.activeElement as HTMLElement | null;
     confirmRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setConfirming(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return setConfirming(null);
+      if (e.key !== 'Tab') return;
+      const buttons = Array.from(sheetRef.current?.querySelectorAll('button') ?? []);
+      if (!buttons.length) return;
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      const inside = sheetRef.current?.contains(document.activeElement);
+      if (e.shiftKey && (!inside || document.activeElement === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!inside || document.activeElement === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [confirming]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      trigger?.focus();
+    };
+  }, [isConfirming]);
 
   const runAction = async (action: string, payload: Record<string, unknown>, confirmText?: string, confirmed = false) => {
     if (confirmText && !confirmed) {
@@ -277,11 +299,11 @@ export default function AdminPage() {
     <div key={e.id} className={`p-3 rounded-xl border-l-4 ${e.kind === 'ALERT' ? severityStyle[e.severity] : 'border-l-slate-300 bg-white'} border border-slate-200/70 space-y-1`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wide">{e.type.replace(/_/g, ' ')}</span>
-        <span className="text-[10px] text-slate-400" title={formatStationDateTime(e.created_at)}>{timeAgo(e.created_at)}</span>
+        <span className="text-[10px] text-slate-500" title={formatStationDateTime(e.created_at)}>{timeAgo(e.created_at)}</span>
       </div>
       <p className="text-xs text-slate-800 leading-relaxed">{e.message}</p>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-400">
+        <span className="text-[10px] text-slate-500">
           {e.actor ? `by ${e.actor}` : ''}
           {e.handled_at ? ` · handled ${timeAgo(e.handled_at)}${e.handled_by ? ` by ${e.handled_by}` : ''}` : ''}
         </span>
@@ -332,7 +354,7 @@ export default function AdminPage() {
               }`}
             >
               {t.label}
-              {t.badge ? <span className="ml-1.5 px-1.5 rounded-full bg-rose-500 text-white text-[10px]">{t.badge}</span> : null}
+              {t.badge ? <span className="ml-1.5 px-1.5 rounded-full bg-rose-700 text-white text-[10px]">{t.badge}</span> : null}
             </button>
           ))}
         </div>
@@ -384,7 +406,7 @@ export default function AdminPage() {
                 ['Students', o.counts.users],
               ].map(([label, value]) => (
                 <div key={label as string} className="p-3 rounded-xl bg-white border border-slate-200">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
                   <p className="text-xl font-black text-slate-900 tabular-nums">{value}</p>
                 </div>
               ))}
@@ -407,7 +429,7 @@ export default function AdminPage() {
                     <p className="text-[11px] text-slate-600">
                       {s.held ? `Held for ${s.borrowed_user}` : loan ? `With ${loan.index_no}${loan.status === 'OVERDUE' ? ' (overdue)' : ''}` : s.availability ? 'In the cabinet' : 'Out, no loan'}
                     </p>
-                    <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <p className="text-[10px] text-slate-500 flex items-center gap-1">
                       <Umbrella className="w-3 h-3" />
                       {c ? (
                         <>
@@ -477,7 +499,7 @@ export default function AdminPage() {
                     <Lock className="w-3 h-3 inline mr-1" />Close lock
                   </button>
                   {s.held && (
-                    <button onClick={() => runAction('slot.release', { slot: s.slot })} className={`${btn} border-amber-300 bg-amber-50 text-amber-800`}>
+                    <button onClick={() => runAction('slot.release', { slot: s.slot }, `Release Slot ${s.slot}? Only do this if a borrow or return is stuck: the cabinet usually settles it by itself.`)} className={`${btn} border-amber-300 bg-amber-50 text-amber-800`}>
                       Release hold
                     </button>
                   )}
@@ -537,8 +559,9 @@ export default function AdminPage() {
         {/* ---------------- Users ---------------- */}
         {tab === 'users' && (
           <div className="space-y-2">
+            <label htmlFor="user-search" className="block text-xs font-semibold text-slate-700">Search users</label>
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
               <input
                 id="user-search"
                 value={userQuery}
@@ -592,6 +615,7 @@ export default function AdminPage() {
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 motion-safe:animate-[fade-in_150ms_ease-out_both]" onClick={() => setConfirming(null)}>
           <div
+            ref={sheetRef}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"

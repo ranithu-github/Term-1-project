@@ -32,15 +32,16 @@ export function emailDomainMessage(): string {
 export const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Per-network limits are generous on purpose: a whole campus can share one public IP.
-// The per-account limits are what stop guessing.
+// The per-account limits are what stop guessing. Signup and reset send an email each,
+// so their network limit also protects the mail quota (Gmail allows ~500 a day).
 export const LIMITS = {
   loginAccount: [10, 15 * 60 * 1000],
   loginNetwork: [300, 15 * 60 * 1000],
   signupAccount: [3, 15 * 60 * 1000],
-  signupNetwork: [60, 15 * 60 * 1000],
+  signupNetwork: [200, 15 * 60 * 1000],
   codeAccount: [8, 15 * 60 * 1000],
-  codeNetwork: [150, 15 * 60 * 1000],
+  codeNetwork: [400, 15 * 60 * 1000],
   forgotAccount: [3, 15 * 60 * 1000],
-  forgotNetwork: [60, 15 * 60 * 1000],
+  forgotNetwork: [200, 15 * 60 * 1000],
   checkIndexNetwork: [300, 15 * 60 * 1000],
 } as const satisfies Record<string, readonly [number, number]>;

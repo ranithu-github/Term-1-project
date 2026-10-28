@@ -92,7 +92,7 @@ function Dashboard() {
   };
   const run = (kind: CabinetKind) => {
     setConfirming(false);
-    void action.run(kind);
+    void action.run(kind, loan?.slot ?? undefined);
   };
 
   return (
@@ -337,7 +337,7 @@ function describe(action: CabinetKind, r: CabinetResult, s: number | string): { 
     case 'WRONG_UMBRELLA':
       return { title: `That isn’t Umbrella ${s}`, body: `Take that umbrella out of Slot ${s}, then try returning Umbrella ${s}.`, urgent: true, help: true, status: { tone: 'warn', text: `Slot ${s} is still unlocked` } };
   }
-  if (r.message === 'NETWORK') return { title: 'You’re offline', body: 'Connect to the internet, then try again. Nothing was opened.' };
+  if (r.message === 'NETWORK') return { title: 'We lost the connection', body: 'Check your internet, then try again. If the cabinet opened, your loan will appear here.' };
   return { title: action === 'borrow' ? 'Couldn’t borrow right now' : 'Couldn’t return right now', body: r.message || 'Please try again in a moment.', help: true };
 }
 

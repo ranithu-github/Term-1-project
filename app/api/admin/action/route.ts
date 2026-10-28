@@ -5,8 +5,12 @@ import { cabinetErrorMessage, cabinetErrorStatus, runCabinetCommand } from '@/li
 import { logActivity, resolveAlerts } from '@/lib/events';
 import { sendResetCode } from '@/lib/password-reset';
 import { OPEN_LOAN_STATUSES } from '@/lib/types';
+import { readJson, str } from '@/lib/http';
 
 export const maxDuration = 30;
+
+// Longer than the 45 s the server waits for the cabinet's answer
+const RELEASE_AFTER_MS = 90_000;
 
 type Body = {
   action?: string;
@@ -28,11 +32,13 @@ export async function POST(request: Request) {
   if (!adminIndex) return fail('Admin access only.', 403);
 
   const actor = `admin:${adminIndex}`;
-  const body: Body = await request.json().catch(() => ({}));
-  const action = body.action || '';
+  const parsed = await readJson<Body>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
+  const action = str(body.action);
   const slot = Number(body.slot);
   const validSlot = Number.isInteger(slot) && slot >= 1 && slot <= 4;
-  const indexNo = (body.index_no || '').trim().toUpperCase();
+  const indexNo = str(body.index_no).toUpperCase();
 
   const log = (type: string, message: string, extra: { slot?: number; index_no?: string; details?: Record<string, unknown> } = {}) =>
     logActivity(type, message, { actor, ...extra });
@@ -52,7 +58,12 @@ export async function POST(request: Request) {
 
       case 'slot.release': {
         if (!validSlot) return fail('Choose a slot from 1 to 4.');
-        const { data: held } = await supabaseAdmin.from('umbrellas').select('pending_op, pending_action, borrowed_user, availability').eq('slot', slot).maybeSingle();
+        const { data: held } = await supabaseAdmin.from('umbrellas').select('pending_op, pending_action, pending_since, borrowed_user, availability').eq('slot', slot).maybeSingle();
+        // The server waits up to 45 s for the cabinet. Until then the lock may be open right now,
+        // and releasing would let an umbrella leave with no loan recorded.
+        if (held?.pending_op && held.pending_since && Date.now() - new Date(held.pending_since).getTime() < RELEASE_AFTER_MS) {
+          return fail(`Slot ${slot} has a ${held.pending_action === 'RETURN' ? 'return' : 'borrow'} running right now. Wait a minute: it usually settles by itself.`, 409);
+        }
         if (held?.pending_action === 'BORROW' && held.pending_op) {
           await supabaseAdmin.rpc('release_borrow', { p_op: held.pending_op });
         } else if (held?.pending_action === 'RETURN' && held.pending_op) {
@@ -71,6 +82,14 @@ export async function POST(request: Request) {
       case 'slot.markOut': {
         if (!validSlot) return fail('Choose a slot from 1 to 4.');
         const available = action === 'slot.markAvailable';
+        if (available) {
+          // A slot can't be offered while its umbrella still has an open loan: close the loan instead
+          const { data: umbrella } = await supabaseAdmin.from('umbrellas').select('umbrella_id').eq('slot', slot).maybeSingle();
+          const { data: openLoan } = umbrella
+            ? await supabaseAdmin.from('borrow_records').select('index_no').eq('umbrella_id', umbrella.umbrella_id).in('status', [...OPEN_LOAN_STATUSES]).limit(1).maybeSingle()
+            : { data: null };
+          if (openLoan) return fail(`Umbrella ${slot} is still on loan to ${openLoan.index_no}. Close that loan in Loans (it frees the slot).`, 409);
+        }
         // Not while a borrow/return is in progress on it: release that first
         const { data: changed } = await supabaseAdmin
           .from('umbrellas')

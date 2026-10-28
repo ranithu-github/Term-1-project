@@ -151,7 +151,7 @@ body {
     background: rgb(var(--card));
     color: rgb(var(--ink));
     font-size: 1.0625rem; /* ≥16px: no zoom on iOS */
-    border: 1px solid rgb(var(--ink) / 0.22); /* 3:1 boundary */
+    border: 1px solid rgb(var(--ink) / 0.52); /* 3:1 boundary on card and paper */
     transition-property: border-color, box-shadow;
     transition-duration: 150ms;
     transition-timing-function: ease-out;

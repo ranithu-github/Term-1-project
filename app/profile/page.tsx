@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, LogOut, ShieldCheck } from 'lucide-react';
-import { Spinner, TabBar } from '@/components/ui';
+import { Notice, Spinner, TabBar } from '@/components/ui';
 import { useStation } from '@/lib/useStation';
 import { clearStationCache } from '@/lib/stationCache';
 import { formatStationDue } from '@/lib/time';
@@ -13,15 +13,19 @@ export default function ProfilePage() {
   const router = useRouter();
   const { me, user } = useStation();
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const loan = me?.active_loan ?? null;
   const initials = (user?.username || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
 
   const signOut = async () => {
     setSigningOut(true);
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {
-      // the cookie is cleared on the next request anyway
+    setSignOutFailed(false);
+    // Only the server can clear the session cookie: on a shared phone, never pretend it did
+    const res = await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    if (!res?.ok) {
+      setSigningOut(false);
+      setSignOutFailed(true);
+      return;
     }
     clearStationCache();
     localStorage.removeItem('astrix_user');
@@ -78,6 +82,11 @@ export default function ProfilePage() {
         )}
 
         <div className="enter enter-3 mt-2">
+          {signOutFailed && (
+            <Notice tone="danger" title="You're still signed in" live="assertive" className="mb-3">
+              We couldn&apos;t reach the server. Check your connection, then tap Sign out again.
+            </Notice>
+          )}
           <button type="button" onClick={signOut} disabled={signingOut} className="btn btn-lg w-full bg-card text-danger shadow-1">
             {signingOut ? <Spinner className="h-5 w-5" /> : <LogOut className="h-5 w-5" strokeWidth={2} aria-hidden="true" />} Sign out
           </button>
